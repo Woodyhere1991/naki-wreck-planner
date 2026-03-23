@@ -451,13 +451,50 @@ header .subtitle { display: none; }
   justify-content: space-between;
 }
 
+/* Mobile view toggle */
+.view-toggle {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: #2ecc40;
+  color: #0d2b0d;
+  border: none;
+  border-radius: 30px;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
 /* Mobile */
-@media (max-width: 768px) {
-  .main-container { flex-direction: column-reverse; }
-  .sidebar { width: 100%; min-width: unset; height: 50vh; border-right: none; border-top: 2px solid #2ecc40; }
-  .map-container { height: 50vh; }
+@media (max-width: 900px) {
+  .view-toggle { display: block; }
+  .main-container { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: none;
+    height: 100%;
+    border-right: none;
+    border-top: none;
+    overflow-y: auto;
+  }
+  #map {
+    width: 100%;
+    height: 100%;
+    min-height: auto;
+  }
+  /* Default: show map, hide list */
+  .main-container.show-map .sidebar { display: none; }
+  .main-container.show-map #map { display: block; flex: 1; }
+  .main-container.show-list .sidebar { display: flex; flex: 1; }
+  .main-container.show-list #map { display: none; }
   header h1 { font-size: 16px; }
-  .header-actions button { padding: 6px 10px; font-size: 12px; }
+  .header-actions button { padding: 6px 10px; font-size: 11px; }
 }
 </style>
 </head>
@@ -475,13 +512,15 @@ header .subtitle { display: none; }
   </div>
 </header>
 
+<button class="view-toggle" id="viewToggle" onclick="toggleView()">Show Pickup List</button>
+
 <div class="route-info" id="routeInfo">
   <span id="routeStops">0 stops</span> |
   <span id="routeDist">0 km</span> |
   <span id="routeTime">0 min</span>
 </div>
 
-<div class="main-container">
+<div class="main-container show-map" id="mainContainer">
   <div class="sidebar">
     <div class="load-calc">
       <h3>Load Calculator</h3>
@@ -1444,6 +1483,30 @@ function buildGoogleMapsUrl(stops) {
     return encodeURIComponent(`${s.street}, ${s.town}, NZ`);
   });
   return 'https://www.google.com/maps/dir/' + [start, ...waypoints, end].join('/');
+}
+
+// ============================================================
+// VIEW TOGGLE (mobile)
+// ============================================================
+let currentView = 'map';
+
+function toggleView() {
+  const container = document.getElementById('mainContainer');
+  const btn = document.getElementById('viewToggle');
+
+  if (currentView === 'map') {
+    container.className = 'main-container show-list';
+    btn.textContent = 'Show Map';
+    btn.style.background = '#3498db';
+    currentView = 'list';
+  } else {
+    container.className = 'main-container show-map';
+    btn.textContent = 'Show Pickup List';
+    btn.style.background = '#2ecc40';
+    currentView = 'map';
+    // Refresh map size after showing
+    setTimeout(() => map.invalidateSize(), 100);
+  }
 }
 
 // ============================================================
