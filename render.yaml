@@ -6,4 +6,4 @@ services:
     startCommand: gunicorn app:app
     envVars:
       - key: GOOGLE_API_KEY
-        value: AIzaSyB5xtyn4xr6XM-gtEegSm-01kBQZ3YkCak
+        sync: false
