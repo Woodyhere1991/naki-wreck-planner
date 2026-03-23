@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Naki Wreck">
+<meta name="theme-color" content="#0d2b0d">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
+<title>Naki Wreck Route Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header — minimal */
+header {
+  background: #0d2b0d;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #2ecc40;
+  flex-shrink: 0;
+  z-index: 1000;
+}
+header h1 {
+  font-size: 16px;
+  color: #2ecc40;
+  font-weight: 700;
+}
+header .subtitle { display: none; }
+
+/* Action buttons — wrap on mobile */
+.header-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.header-actions button {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-refresh { background: #2ecc40; color: #0d2b0d; }
+.btn-optimize { background: #e67e22; color: #fff; }
+.btn-gmaps { background: #3498db; color: #fff; }
+
+/* MOBILE FIRST — map on top, panels below */
+.main-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Map takes most of the screen on mobile */
+#map {
+  flex: 1;
+  min-height: 50vh;
+}
+
+/* Sidebar scrolls below map on mobile */
+.sidebar {
+  width: 100%;
+  max-height: 45vh;
+  background: #16213e;
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid #2ecc40;
+  overflow-y: auto;
+}
+
+/* DESKTOP — side by side */
+@media (min-width: 900px) {
+  .main-container {
+    flex-direction: row;
+  }
+  #map {
+    min-height: auto;
+    flex: 1;
+  }
+  .sidebar {
+    width: 30%;
+    min-width: 320px;
+    max-width: 400px;
+    max-height: none;
+    border-top: none;
+    border-left: 2px solid #2ecc40;
+    overflow: hidden;
+  }
+}
+
+/* Load calculator — compact */
+.load-calc {
+  background: #1a1a2e;
+  padding: 8px 12px;
+  border-bottom: 1px solid #2a3a5c;
+  flex-shrink: 0;
+}
+.load-calc h3 {
+  font-size: 12px;
+  color: #2ecc40;
+  margin-bottom: 4px;
+}
+.load-bar-container {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.load-bar-wrap {
+  flex: 1;
+}
+.load-bar-label {
+  font-size: 12px;
+  color: #8fbc8f;
+  margin-bottom: 3px;
+  display: flex;
+  justify-content: space-between;
+}
+.load-bar {
+  height: 18px;
+  background: #2a3a5c;
+  border-radius: 9px;
+  overflow: hidden;
+  position: relative;
+}
+.load-bar-fill {
+  height: 100%;
+  border-radius: 9px;
+  transition: width 0.3s, background 0.3s;
+  background: #2ecc40;
+}
+.load-bar-fill.warn { background: #e67e22; }
+.load-bar-fill.over { background: #e74c3c; }
+.load-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2ecc40;
+  min-width: 80px;
+  text-align: center;
+}
+.load-total.warn { color: #e67e22; }
+.load-total.over { color: #e74c3c; }
+.load-warning {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  display: none;
+  text-align: center;
+}
+.load-warning.show { display: block; }
+
+/* Corridor filter tabs */
+.corridor-tabs {
+  display: flex;
+  padding: 8px 12px;
+  gap: 6px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a3a5c;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.corridor-tab {
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+.corridor-tab.all { background: #2a3a5c; color: #e0e0e0; }
+.corridor-tab.all.active { border-color: #e0e0e0; }
+.corridor-tab.north { background: #1a4a8a; color: #5dade2; }
+.corridor-tab.north.active { border-color: #5dade2; }
+.corridor-tab.south { background: #1a6a2a; color: #58d68d; }
+.corridor-tab.south.active { border-color: #58d68d; }
+.corridor-tab.coastal { background: #7a4a0a; color: #f0a030; }
+.corridor-tab.coastal.active { border-color: #f0a030; }
+.corridor-tab.unknown { background: #4a2a4a; color: #c39bd3; }
+.corridor-tab.unknown.active { border-color: #c39bd3; }
+
+/* Pickup list */
+.pickup-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.pickup-list::-webkit-scrollbar { width: 8px; }
+.pickup-list::-webkit-scrollbar-track { background: #16213e; }
+.pickup-list::-webkit-scrollbar-thumb { background: #2a3a5c; border-radius: 4px; }
+
+.corridor-group {
+  margin-bottom: 12px;
+}
+.corridor-header {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.corridor-header.north { background: #1a4a8a; color: #5dade2; }
+.corridor-header.south { background: #1a6a2a; color: #58d68d; }
+.corridor-header.coastal { background: #7a4a0a; color: #f0a030; }
+.corridor-header.unknown { background: #4a2a4a; color: #c39bd3; }
+
+.pickup-card {
+  background: #1e2d50;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-left: 4px solid #2a3a5c;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pickup-card:hover { background: #253660; }
+.pickup-card.selected { border-left-color: #2ecc40; background: #1a3a2a; }
+.pickup-card.north { border-left-color: #3498db; }
+.pickup-card.south { border-left-color: #2ecc71; }
+.pickup-card.coastal { border-left-color: #e67e22; }
+.pickup-card.unknown { border-left-color: #9b59b6; }
+
+.pickup-card .top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.pickup-card .name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #ecf0f1;
+}
+.pickup-card .spaces {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #2a3a5c;
+  color: #2ecc40;
+  white-space: nowrap;
+}
+.pickup-card .address {
+  font-size: 12px;
+  color: #8fbc8f;
+  margin-bottom: 4px;
+}
+.pickup-card .phone-row {
+  font-size: 12px;
+  color: #7f8c8d;
+  margin-bottom: 4px;
+}
+.pickup-card .phone-row a {
+  color: #5dade2;
+  text-decoration: none;
+}
+.pickup-card .items {
+  font-size: 11px;
+  color: #bdc3c7;
+  line-height: 1.4;
+}
+.pickup-card .additional {
+  font-size: 11px;
+  color: #e67e22;
+  margin-top: 3px;
+  font-style: italic;
+}
+.pickup-card .date-tag {
+  font-size: 10px;
+  color: #7f8c8d;
+  margin-top: 4px;
+}
+
+.pickup-card .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #2a3a5c;
+}
+.pickup-card .check-row label {
+  font-size: 12px;
+  color: #8fbc8f;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pickup-card .check-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #2ecc40;
+  cursor: pointer;
+}
+.route-order {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 50%;
+  background: #2ecc40;
+  color: #0d2b0d;
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* Map */
+.map-container {
+  flex: 1;
+  position: relative;
+}
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Google Maps modal */
+.gmaps-modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+}
+.gmaps-modal.show { display: flex; }
+.gmaps-content {
+  background: #16213e;
+  border: 2px solid #2ecc40;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.gmaps-content h2 {
+  color: #2ecc40;
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+.gmaps-link {
+  display: block;
+  padding: 12px 16px;
+  background: #3498db;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-align: center;
+  transition: background 0.2s;
+}
+.gmaps-link:hover { background: #2980b9; }
+.gmaps-close {
+  margin-top: 16px;
+  padding: 10px 24px;
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Route info bar */
+.route-info {
+  display: none;
+  padding: 8px 16px;
+  background: #0f3d0f;
+  border-bottom: 1px solid #2ecc40;
+  font-size: 13px;
+  color: #2ecc40;
+  flex-shrink: 0;
+  text-align: center;
+}
+.route-info.show { display: block; }
+.route-info span { margin: 0 12px; font-weight: 600; }
+
+/* Loading overlay */
+.loading {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 3000;
+  justify-content: center;
+  align-items: center;
+}
+.loading.show { display: flex; }
+.loading-box {
+  background: #16213e;
+  border: 2px solid #2ecc40;
+  border-radius: 12px;
+  padding: 32px 48px;
+  text-align: center;
+}
+.loading-box .spinner {
+  width: 40px; height: 40px;
+  border: 4px solid #2a3a5c;
+  border-top-color: #2ecc40;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-box p { color: #8fbc8f; font-size: 14px; }
+
+/* Status bar */
+.status-bar {
+  background: #0d2b0d;
+  padding: 4px 16px;
+  font-size: 11px;
+  color: #8fbc8f;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .main-container { flex-direction: column-reverse; }
+  .sidebar { width: 100%; min-width: unset; height: 50vh; border-right: none; border-top: 2px solid #2ecc40; }
+  .map-container { height: 50vh; }
+  header h1 { font-size: 16px; }
+  .header-actions button { padding: 6px 10px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center;">
+    <h1>Naki Wreck Route Planner</h1>
+    <span class="subtitle">Whiteware Removal</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn-refresh" onclick="syncAndRefresh()" title="Pull latest form submissions from your 3 Jotform sheets into the master sheet">Sync Sheets</button>
+    <button class="btn-optimize" onclick="optimizeRoute()" title="Reorder your selected stops for the shortest drive — Inglewood to Global Metal Solutions">Optimize Route</button>
+    <button style="background:#e74c3c;color:#fff;padding:6px 12px;border:none;border-radius:5px;font-weight:600;font-size:12px;cursor:pointer" onclick="showCommsPanel()" title="Generate customer texts — evening reminders, on-my-way, and review requests. Tap any text to copy it.">Texts</button>
+  </div>
+</header>
+
+<div class="route-info" id="routeInfo">
+  <span id="routeStops">0 stops</span> |
+  <span id="routeDist">0 km</span> |
+  <span id="routeTime">0 min</span>
+</div>
+
+<div class="main-container">
+  <div class="sidebar">
+    <div class="load-calc">
+      <h3>Load Calculator</h3>
+      <div class="load-bar-container">
+        <div class="load-bar-wrap">
+          <div class="load-bar-label">
+            <span>Trailer (18 spaces)</span>
+            <span id="trailerCount">0 / 18</span>
+          </div>
+          <div class="load-bar">
+            <div class="load-bar-fill" id="trailerBar" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="load-total" id="totalSpaces">0</div>
+      </div>
+      <div class="load-bar-container" style="margin-top:6px;">
+        <div class="load-bar-wrap">
+          <div class="load-bar-label">
+            <span>Ute (8 spaces)</span>
+            <span id="uteCount">0 / 8</span>
+          </div>
+          <div class="load-bar">
+            <div class="load-bar-fill" id="uteBar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="load-warning" id="loadWarning">OVER CAPACITY! Consider splitting into two runs.</div>
+    </div>
+
+    <div class="corridor-tabs">
+      <div class="corridor-tab all active" onclick="filterCorridor('all')">All</div>
+      <div class="corridor-tab north" onclick="filterCorridor('north')">North</div>
+      <div class="corridor-tab south" onclick="filterCorridor('south')">South</div>
+      <div class="corridor-tab coastal" onclick="filterCorridor('coastal')">Coastal</div>
+      <div class="corridor-tab unknown" onclick="filterCorridor('unknown')">Unknown</div>
+    </div>
+
+    <div class="pickup-list" id="pickupList">
+      <p style="text-align:center;padding:40px;color:#8fbc8f;">Loading pickups...</p>
+    </div>
+  </div>
+
+  <div class="map-container">
+    <div id="map"></div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span id="statusText">Ready</span>
+  <span id="statusCount">0 pickups loaded</span>
+</div>
+
+<!-- Google Maps modal -->
+<div class="gmaps-modal" id="gmapsModal">
+  <div class="gmaps-content">
+    <h2>Google Maps Navigation</h2>
+    <div id="gmapsLinks"></div>
+    <button class="gmaps-close" onclick="closeGmapsModal()">Close</button>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingText">Loading...</p>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const START_POINT = { lat: -39.1567, lng: 174.2064, label: "10 Tawa St, Inglewood" };
+const END_POINT   = { lat: -39.0360, lng: 174.1017, label: "Global Metal Solutions, Bell Block" };
+const TRAILER_CAP = 18;
+const UTE_CAP = 8;
+
+// Town -> corridor mapping
+const CORRIDOR_MAP = {
+  'new plymouth': 'north', 'bell block': 'north', 'oakura': 'north',
+  'waitara': 'north', 'inglewood': 'north', 'fitzroy': 'north',
+  'merrilands': 'north', 'westown': 'north', 'moturoa': 'north',
+  'strandon': 'north', 'vogeltown': 'north', 'spotswood': 'north',
+  'brooklands': 'north',
+  'patea': 'south', 'waverley': 'south', 'hawera': 'south',
+  'eltham': 'south', 'stratford': 'south', 'normanby': 'south',
+  'manaia': 'south', 'kaponga': 'south', 'awatuna': 'south',
+  'opunake': 'coastal', 'rahotu': 'coastal', 'oaonui': 'coastal',
+  'okato': 'coastal'
+};
+
+const CORRIDOR_COLORS = {
+  north: '#3498db',
+  south: '#2ecc71',
+  coastal: '#e67e22',
+  unknown: '#9b59b6'
+};
+
+// Fallback coordinates for tricky towns [lng, lat] -> we store as {lat, lng}
+const FALLBACK_COORDS = {
+  'waitara':       { lat: -38.9976, lng: 174.2348 },
+  'hawera':        { lat: -39.5908, lng: 174.2810 },
+  'patea':         { lat: -39.7467, lng: 174.4861 },
+  'opunake':       { lat: -39.4560, lng: 174.0158 },
+  'rahotu':        { lat: -39.3300, lng: 173.8939 },
+  'oaonui':        { lat: -39.3914, lng: 174.0545 },
+  'oakura':        { lat: -39.1060, lng: 174.0234 },
+  'eltham':        { lat: -39.4290, lng: 174.3017 },
+  'stratford':     { lat: -39.3333, lng: 174.2837 },
+  'inglewood':     { lat: -39.1567, lng: 174.2064 },
+  'bell block':    { lat: -39.0360, lng: 174.1017 },
+  'new plymouth':  { lat: -39.0556, lng: 174.0752 },
+  'fitzroy':       { lat: -39.0500, lng: 174.1100 },
+  'merrilands':    { lat: -39.0650, lng: 174.0650 },
+  'westown':       { lat: -39.0680, lng: 174.0540 },
+  'moturoa':       { lat: -39.0720, lng: 174.0480 },
+  'strandon':      { lat: -39.0530, lng: 174.1000 },
+  'vogeltown':     { lat: -39.0750, lng: 174.0620 },
+  'spotswood':     { lat: -39.0780, lng: 174.0380 },
+  'brooklands':    { lat: -39.0200, lng: 174.0850 },
+  'normanby':      { lat: -39.5100, lng: 174.2350 },
+  'manaia':        { lat: -39.5450, lng: 174.1240 },
+  'kaponga':       { lat: -39.4200, lng: 174.1600 },
+  'waverley':      { lat: -39.7650, lng: 174.6310 },
+  'awatuna':       { lat: -39.3900, lng: 174.1200 },
+  'okato':         { lat: -39.1930, lng: 173.8820 }
+};
+
+// Large items that take 2 spaces
+const LARGE_ITEMS = [
+  'chest freezer', 'double door fridge', 'french door',
+  'double door', 'side by side', 'american fridge'
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let allStops = [];       // Merged/processed stops
+let geocodeCache = {};   // address -> {lat, lng}
+let markers = {};        // stopId -> marker
+let routeLayer = null;
+let optimizedOrder = null;
+let currentFilter = 'all';
+let map;
+
+// ============================================================
+// MAP INIT
+// ============================================================
+function initMap() {
+  map = L.map('map').setView([-39.15, 174.15], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Start marker
+  L.marker([START_POINT.lat, START_POINT.lng], {
+    icon: makeIcon('#e74c3c', 'S'),
+    zIndexOffset: 1000
+  }).addTo(map).bindPopup('<b>START:</b> ' + START_POINT.label);
+
+  // End marker
+  L.marker([END_POINT.lat, END_POINT.lng], {
+    icon: makeIcon('#e74c3c', 'E'),
+    zIndexOffset: 1000
+  }).addTo(map).bindPopup('<b>END:</b> ' + END_POINT.label);
+}
+
+function makeIcon(color, text) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      background:${color};
+      color:#fff;
+      width:28px;height:28px;
+      border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      font-weight:700;font-size:12px;
+      border:2px solid #fff;
+      box-shadow:0 2px 6px rgba(0,0,0,0.4);
+    ">${text}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16]
+  });
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadPickups() {
+  showLoading('Loading pickup data...');
+  setStatus('Fetching data from Google Sheets...');
+
+  try {
+    // Load geocache first
+    const cacheResp = await fetch('/api/geocache');
+    if (cacheResp.ok) {
+      geocodeCache = await cacheResp.json();
+    }
+
+    const resp = await fetch('/api/pickups');
+    const data = await resp.json();
+
+    if (data.error) {
+      setStatus('Error: ' + data.error);
+      hideLoading();
+      document.getElementById('pickupList').innerHTML =
+        `<p style="text-align:center;padding:40px;color:#e74c3c;">Error loading data:<br>${data.error}</p>`;
+      return;
+    }
+
+    const raw = data.pickups || [];
+    setStatus(`Got ${raw.length} rows, processing...`);
+
+    // Merge same person + same address
+    allStops = mergePickups(raw);
+    setStatus(`${allStops.length} stops after merging`);
+
+    // Geocode all
+    await geocodeAll();
+
+    // Render
+    renderSidebar();
+    renderMarkers();
+    updateLoad();
+    setStatusCount(allStops.length + ' pickups loaded');
+    setStatus('Ready');
+  } catch (err) {
+    setStatus('Error: ' + err.message);
+    document.getElementById('pickupList').innerHTML =
+      `<p style="text-align:center;padding:40px;color:#e74c3c;">Failed to load:<br>${err.message}</p>`;
+  }
+  hideLoading();
+}
+
+function mergePickups(raw) {
+  // Group by (first+last+street+town) to merge same person same address
+  const groups = {};
+  for (const p of raw) {
+    const key = [
+      (p.first_name || '').trim().toLowerCase(),
+      (p.last_name || '').trim().toLowerCase(),
+      (p.street || '').trim().toLowerCase(),
+      (p.town || '').trim().toLowerCase()
+    ].join('|');
+
+    if (!groups[key]) {
+      groups[key] = {
+        first_name: p.first_name || '',
+        last_name: p.last_name || '',
+        phone: p.phone || '',
+        email: p.email || '',
+        street: p.street || '',
+        town: p.town || '',
+        area: p.area || '',
+        rural: p.rural || '',
+        appliances: [...(p.appliances || [])],
+        additional_info: p.additional_info || '',
+        dates: [p.date || ''],
+        total: p.total || '',
+        submission_ids: [p.submission_id || '']
+      };
+    } else {
+      // Merge appliances
+      groups[key].appliances.push(...(p.appliances || []));
+      groups[key].dates.push(p.date || '');
+      groups[key].submission_ids.push(p.submission_id || '');
+      if (p.additional_info) {
+        groups[key].additional_info += '; ' + p.additional_info;
+      }
+    }
+  }
+
+  // Convert to array with IDs
+  return Object.values(groups).map((g, idx) => {
+    const town = (g.town || '').trim().toLowerCase();
+    const area = (g.area || '').trim().toLowerCase();
+    let corridor = CORRIDOR_MAP[town] || CORRIDOR_MAP[area] || 'unknown';
+
+    // Try partial match on town
+    if (corridor === 'unknown') {
+      for (const [k, v] of Object.entries(CORRIDOR_MAP)) {
+        if (town.includes(k) || k.includes(town)) {
+          corridor = v;
+          break;
+        }
+      }
+    }
+
+    return {
+      id: 'stop-' + idx,
+      ...g,
+      corridor,
+      spaces: calcSpaces(g.appliances),
+      selected: true,
+      coords: null,
+      routeOrder: null
+    };
+  });
+}
+
+function calcSpaces(appliances) {
+  let total = 0;
+  for (const item of appliances) {
+    const lower = item.toLowerCase();
+    const isLarge = LARGE_ITEMS.some(lg => lower.includes(lg));
+    total += isLarge ? 2 : 1;
+  }
+  return total;
+}
+
+// ============================================================
+// GEOCODING
+// ============================================================
+async function geocodeAll() {
+  showLoading('Geocoding addresses...');
+  let newCacheEntries = {};
+  let count = 0;
+
+  for (const stop of allStops) {
+    const fullAddr = buildAddress(stop);
+    const cacheKey = fullAddr.toLowerCase().trim();
+    count++;
+    document.getElementById('loadingText').textContent =
+      `Geocoding ${count}/${allStops.length}: ${stop.town}...`;
+
+    // Check cache
+    if (geocodeCache[cacheKey]) {
+      stop.coords = geocodeCache[cacheKey];
+      continue;
+    }
+
+    // Try fallback for town
+    const townKey = (stop.town || '').trim().toLowerCase();
+    if (FALLBACK_COORDS[townKey] && (!stop.street || stop.street.trim() === '')) {
+      stop.coords = FALLBACK_COORDS[townKey];
+      geocodeCache[cacheKey] = stop.coords;
+      newCacheEntries[cacheKey] = stop.coords;
+      continue;
+    }
+
+    // Try Nominatim
+    try {
+      const coords = await nominatimGeocode(fullAddr);
+      if (coords) {
+        stop.coords = coords;
+        geocodeCache[cacheKey] = coords;
+        newCacheEntries[cacheKey] = coords;
+      } else {
+        // Fallback to town center
+        if (FALLBACK_COORDS[townKey]) {
+          stop.coords = FALLBACK_COORDS[townKey];
+          geocodeCache[cacheKey] = stop.coords;
+          newCacheEntries[cacheKey] = stop.coords;
+        }
+      }
+    } catch (err) {
+      console.warn('Geocode error for', fullAddr, err);
+      if (FALLBACK_COORDS[townKey]) {
+        stop.coords = FALLBACK_COORDS[townKey];
+        geocodeCache[cacheKey] = stop.coords;
+        newCacheEntries[cacheKey] = stop.coords;
+      }
+    }
+
+    // Rate limit (Nominatim requires 1 req/sec)
+    await sleep(1100);
+  }
+
+  // Save new cache entries
+  if (Object.keys(newCacheEntries).length > 0) {
+    try {
+      await fetch('/api/geocache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCacheEntries)
+      });
+    } catch (e) { console.warn('Cache save failed', e); }
+  }
+  hideLoading();
+}
+
+function buildAddress(stop) {
+  const parts = [];
+  if (stop.street) parts.push(stop.street.trim());
+  if (stop.town) parts.push(stop.town.trim());
+  parts.push('Taranaki');
+  parts.push('New Zealand');
+  return parts.join(', ');
+}
+
+async function nominatimGeocode(address) {
+  const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+    q: address,
+    format: 'json',
+    limit: '1',
+    countrycodes: 'nz'
+  });
+  const resp = await fetch(url, {
+    headers: { 'User-Agent': 'NakiWreckRoutePlanner/1.0' }
+  });
+  const results = await resp.json();
+  if (results.length > 0) {
+    return {
+      lat: parseFloat(results[0].lat),
+      lng: parseFloat(results[0].lon)
+    };
+  }
+  return null;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// RENDERING
+// ============================================================
+function renderSidebar() {
+  const list = document.getElementById('pickupList');
+  const corridors = ['north', 'south', 'coastal', 'unknown'];
+  let html = '';
+
+  for (const cor of corridors) {
+    const stops = allStops.filter(s => s.corridor === cor);
+    if (stops.length === 0) continue;
+    if (currentFilter !== 'all' && currentFilter !== cor) continue;
+
+    const totalSpaces = stops.reduce((sum, s) => sum + s.spaces, 0);
+    const corLabel = cor.charAt(0).toUpperCase() + cor.slice(1);
+
+    html += `<div class="corridor-group">`;
+    html += `<div class="corridor-header ${cor}">
+      <span>${corLabel} Corridor (${stops.length} stops)</span>
+      <span>${totalSpaces} spaces</span>
+    </div>`;
+
+    for (const stop of stops) {
+      const checked = stop.selected ? 'checked' : '';
+      const selClass = stop.selected ? 'selected' : '';
+      const orderBadge = stop.routeOrder !== null
+        ? `<span class="route-order">${stop.routeOrder}</span>`
+        : '';
+
+      html += `<div class="pickup-card ${cor} ${selClass}" id="card-${stop.id}"
+                    onclick="panToStop('${stop.id}')">
+        <div class="top-row">
+          <span class="name">${orderBadge}${esc(stop.first_name)} ${esc(stop.last_name)}</span>
+          <span class="spaces">${stop.spaces} space${stop.spaces !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="address" onclick="event.stopPropagation()">
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.street + ', ' + stop.town + ', Taranaki, NZ')}"
+             target="_blank" rel="noopener"
+             style="color:#3498db;text-decoration:none;border-bottom:1px dashed #3498db">
+            ${esc(stop.street)}, ${esc(stop.town)}
+          </a>
+        </div>
+        <div class="phone-row">
+          <a href="tel:${esc(stop.phone)}">${esc(stop.phone)}</a>
+        </div>
+        <div class="items">${stop.appliances.map(a => esc(a)).join(' | ')}</div>
+        ${stop.additional_info ? `<div class="additional">${esc(stop.additional_info)}</div>` : ''}
+        <div class="date-tag">${stop.dates.join(', ')}</div>
+        <div class="check-row" onclick="event.stopPropagation()">
+          <label>
+            <input type="checkbox" ${checked} onchange="toggleStop('${stop.id}', this.checked)">
+            Include in route
+          </label>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  if (!html) {
+    html = '<p style="text-align:center;padding:40px;color:#8fbc8f;">No pickups in this corridor.</p>';
+  }
+
+  list.innerHTML = html;
+  updateCorridorTabCounts();
+}
+
+function renderMarkers() {
+  // Remove existing
+  for (const [id, m] of Object.entries(markers)) {
+    map.removeLayer(m);
+  }
+  markers = {};
+
+  const bounds = [];
+
+  for (const stop of allStops) {
+    if (!stop.coords) continue;
+    if (currentFilter !== 'all' && currentFilter !== stop.corridor) continue;
+
+    const color = CORRIDOR_COLORS[stop.corridor] || '#9b59b6';
+    const label = stop.routeOrder !== null ? String(stop.routeOrder) : '';
+    const opacity = stop.selected ? 1.0 : 0.4;
+
+    const marker = L.marker([stop.coords.lat, stop.coords.lng], {
+      icon: makeIcon(color, label || ''),
+      opacity: opacity,
+      zIndexOffset: stop.selected ? 500 : 0
+    }).addTo(map);
+
+    marker.bindPopup(`
+      <b>${esc(stop.first_name)} ${esc(stop.last_name)}</b><br>
+      ${esc(stop.street)}, ${esc(stop.town)}<br>
+      <a href="tel:${esc(stop.phone)}">${esc(stop.phone)}</a><br>
+      <em>${stop.appliances.join(', ')}</em><br>
+      <b>${stop.spaces} spaces</b>
+    `);
+
+    markers[stop.id] = marker;
+    bounds.push([stop.coords.lat, stop.coords.lng]);
+  }
+
+  // Add start/end to bounds
+  bounds.push([START_POINT.lat, START_POINT.lng]);
+  bounds.push([END_POINT.lat, END_POINT.lng]);
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+function updateCorridorTabCounts() {
+  const tabs = document.querySelectorAll('.corridor-tab');
+  tabs.forEach(tab => {
+    const cor = ['all', 'north', 'south', 'coastal', 'unknown'].find(c => tab.classList.contains(c));
+    if (!cor) return;
+    const count = cor === 'all'
+      ? allStops.length
+      : allStops.filter(s => s.corridor === cor).length;
+    const label = cor.charAt(0).toUpperCase() + cor.slice(1);
+    tab.textContent = cor === 'all' ? `All (${count})` : `${label} (${count})`;
+  });
+}
+
+// ============================================================
+// INTERACTIONS
+// ============================================================
+function toggleStop(id, checked) {
+  const stop = allStops.find(s => s.id === id);
+  if (stop) {
+    stop.selected = checked;
+    renderSidebar();
+    renderMarkers();
+    updateLoad();
+  }
+}
+
+function panToStop(id) {
+  const stop = allStops.find(s => s.id === id);
+  if (stop && stop.coords) {
+    map.setView([stop.coords.lat, stop.coords.lng], 14);
+    if (markers[id]) markers[id].openPopup();
+  }
+}
+
+function filterCorridor(cor) {
+  currentFilter = cor;
+  document.querySelectorAll('.corridor-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.corridor-tab.${cor}`).classList.add('active');
+  renderSidebar();
+  renderMarkers();
+  updateLoad();
+}
+
+// ============================================================
+// LOAD CALCULATOR
+// ============================================================
+function updateLoad() {
+  // Only count stops from the active corridor filter
+  let filtered = allStops.filter(s => s.selected);
+  if (currentFilter !== 'all') {
+    filtered = filtered.filter(s => s.corridor === currentFilter);
+  }
+  const total = filtered.reduce((sum, s) => sum + s.spaces, 0);
+
+  // Split: trailer fills first, overflow goes to ute
+  const onTrailer = Math.min(total, TRAILER_CAP);
+  const overflow = Math.max(0, total - TRAILER_CAP);
+  const onUte = Math.min(overflow, UTE_CAP);
+  const overCapacity = total > (TRAILER_CAP + UTE_CAP);
+  const needsDropoff = overflow > 0;
+
+  // Trailer bar
+  const trailerPct = Math.min(100, (onTrailer / TRAILER_CAP) * 100);
+  const trailerBar = document.getElementById('trailerBar');
+  trailerBar.style.width = trailerPct + '%';
+  trailerBar.className = 'load-bar-fill' +
+    (onTrailer >= TRAILER_CAP ? ' warn' : '');
+  document.getElementById('trailerCount').textContent = `${onTrailer} / ${TRAILER_CAP}`;
+
+  // Ute bar
+  const utePct = Math.min(100, (onUte / UTE_CAP) * 100);
+  const uteBar = document.getElementById('uteBar');
+  uteBar.style.width = utePct + '%';
+  uteBar.className = 'load-bar-fill' +
+    (onUte > UTE_CAP ? ' over' : onUte > 0 ? ' warn' : '');
+  document.getElementById('uteCount').textContent = `${onUte} / ${UTE_CAP}`;
+
+  // Total
+  const totalEl = document.getElementById('totalSpaces');
+  totalEl.textContent = total + ' items';
+  totalEl.className = 'load-total' +
+    (overCapacity ? ' over' : needsDropoff ? ' warn' : '');
+
+  // Warning
+  const warn = document.getElementById('loadWarning');
+  if (overCapacity) {
+    warn.textContent = `Over capacity by ${total - TRAILER_CAP - UTE_CAP} — need to drop off and come back`;
+    warn.classList.add('show');
+  } else if (needsDropoff) {
+    warn.textContent = `Trailer full — ${onUte} items on ute`;
+    warn.classList.add('show');
+  } else {
+    warn.classList.remove('show');
+  }
+}
+
+// ============================================================
+// ROUTE OPTIMIZATION
+// ============================================================
+async function optimizeRoute() {
+  const selected = allStops.filter(s => s.selected && s.coords);
+  if (selected.length === 0) {
+    alert('No stops selected or no stops have coordinates.');
+    return;
+  }
+
+  showLoading('Optimizing route via OSRM...');
+  setStatus('Sending to OSRM trip API...');
+
+  // Build coordinates string: start + stops + end
+  // OSRM trip format: lng,lat;lng,lat;...
+  const coords = [
+    `${START_POINT.lng},${START_POINT.lat}`,
+    ...selected.map(s => `${s.coords.lng},${s.coords.lat}`),
+    `${END_POINT.lng},${END_POINT.lat}`
+  ].join(';');
+
+  // Source=first, destination=last to fix start/end
+  const url = `https://router.project-osrm.org/trip/v1/driving/${coords}` +
+    `?source=first&destination=last&roundtrip=false&geometries=geojson&overview=full`;
+
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.code !== 'Ok') {
+      alert('OSRM error: ' + (data.message || data.code));
+      hideLoading();
+      return;
+    }
+
+    const trip = data.trips[0];
+    const waypoints = data.waypoints;
+
+    // Clear old route
+    if (routeLayer) map.removeLayer(routeLayer);
+
+    // Draw route
+    const routeCoords = trip.geometry.coordinates.map(c => [c[1], c[0]]);
+    routeLayer = L.polyline(routeCoords, {
+      color: '#2ecc40',
+      weight: 4,
+      opacity: 0.8
+    }).addTo(map);
+
+    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+
+    // Update stop order from waypoints
+    // OSRM returns waypoints in the order we sent them.
+    // Each waypoint has a waypoint_index = its position in the optimized trip.
+    // waypoints[0] = start, waypoints[last] = end, middle ones = our stops.
+    allStops.forEach(s => s.routeOrder = null);
+    optimizedOrder = [];
+
+    const wpOrder = []; // {stopIdx, tripOrder}
+    for (let i = 1; i < waypoints.length - 1; i++) {
+      wpOrder.push({
+        stopIdx: i - 1,
+        tripOrder: waypoints[i].waypoint_index
+      });
+    }
+    wpOrder.sort((a, b) => a.tripOrder - b.tripOrder);
+
+    for (let order = 0; order < wpOrder.length; order++) {
+      const { stopIdx } = wpOrder[order];
+      selected[stopIdx].routeOrder = order + 1;
+      optimizedOrder.push(selected[stopIdx]);
+    }
+
+    // Show route info
+    const dist = (trip.distance / 1000).toFixed(1);
+    const time = Math.round(trip.duration / 60);
+    document.getElementById('routeStops').textContent = selected.length + ' stops';
+    document.getElementById('routeDist').textContent = dist + ' km';
+    document.getElementById('routeTime').textContent = time + ' min';
+    document.getElementById('routeInfo').classList.add('show');
+
+    setStatus(`Route optimized: ${dist} km, ~${time} min`);
+
+    renderSidebar();
+    renderMarkers();
+  } catch (err) {
+    alert('Route optimization failed: ' + err.message);
+    setStatus('Route error: ' + err.message);
+  }
+
+  hideLoading();
+}
+
+// ============================================================
+// GOOGLE MAPS LINKS
+// ============================================================
+function openGoogleMaps() {
+  // Use optimized order if available, otherwise just selected stops
+  let stops;
+  if (optimizedOrder && optimizedOrder.length > 0) {
+    stops = optimizedOrder.filter(s => s.coords);
+  } else {
+    stops = allStops.filter(s => s.selected && s.coords);
+  }
+
+  if (stops.length === 0) {
+    alert('No stops selected with coordinates.');
+    return;
+  }
+
+  // Google Maps allows max ~9 waypoints per URL (start + end + waypoints)
+  // Format: https://www.google.com/maps/dir/lat,lng/lat,lng/...
+  const MAX_WAYPOINTS = 9;
+  const links = [];
+
+  // Split stops into chunks
+  for (let i = 0; i < stops.length; i += MAX_WAYPOINTS) {
+    const chunk = stops.slice(i, i + MAX_WAYPOINTS);
+    const isFirst = (i === 0);
+    const isLast = (i + MAX_WAYPOINTS >= stops.length);
+
+    let waypoints = [];
+
+    // If first chunk, start from start point
+    if (isFirst) {
+      waypoints.push(`${START_POINT.lat},${START_POINT.lng}`);
+    } else {
+      // Start from last stop of previous chunk
+      const prevStop = stops[i - 1];
+      waypoints.push(`${prevStop.coords.lat},${prevStop.coords.lng}`);
+    }
+
+    // Add chunk stops
+    for (const s of chunk) {
+      waypoints.push(`${s.coords.lat},${s.coords.lng}`);
+    }
+
+    // If last chunk, end at end point
+    if (isLast) {
+      waypoints.push(`${END_POINT.lat},${END_POINT.lng}`);
+    }
+
+    const url = 'https://www.google.com/maps/dir/' + waypoints.join('/');
+    links.push({
+      label: links.length === 0 && stops.length <= MAX_WAYPOINTS
+        ? 'Open Route in Google Maps'
+        : `Part ${links.length + 1}`,
+      url
+    });
+  }
+
+  // Show modal
+  const container = document.getElementById('gmapsLinks');
+  container.innerHTML = links.map(l =>
+    `<a class="gmaps-link" href="${l.url}" target="_blank">${l.label}</a>`
+  ).join('');
+  document.getElementById('gmapsModal').classList.add('show');
+}
+
+function closeGmapsModal() {
+  document.getElementById('gmapsModal').classList.remove('show');
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function esc(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text || 'Loading...';
+  document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+function setStatus(text) {
+  document.getElementById('statusText').textContent = text;
+}
+function setStatusCount(text) {
+  document.getElementById('statusCount').textContent = text;
+}
+
+// ============================================================
+// ============================================================
+// SYNC SHEETS — pulls new Jotform data then refreshes
+// ============================================================
+async function syncAndRefresh() {
+  const btn = event.target;
+  btn.textContent = 'Syncing...';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/sync-sheets', { method: 'POST' });
+    const data = await resp.json();
+    if (data.output && data.output !== 'No new pickups') {
+      alert(data.output);
+    }
+    await loadPickups();
+  } catch (e) {
+    alert('Sync failed: ' + e.message);
+  }
+  btn.textContent = 'Sync Sheets';
+  btn.disabled = false;
+}
+
+// ============================================================
+// SEND ROUTE TO TELEGRAM — sends summary + Google Maps link
+// ============================================================
+async function sendRouteToTelegram() {
+  const selected = getSelectedStops();
+  if (selected.length === 0) { alert('No stops selected'); return; }
+
+  let msg = `<b>Route (${selected.length} stops)</b>\n`;
+  if (document.getElementById('routeInfo').textContent) {
+    msg += document.getElementById('routeInfo').textContent + '\n';
+  }
+  msg += '\n';
+  selected.forEach((s, i) => {
+    const items = s.appliances.slice(0, 2).join(', ');
+    msg += `${i+1}. ${s.first_name} ${s.last_name} — ${items}\n`;
+  });
+
+  // Add Google Maps link
+  const mapsUrl = buildGoogleMapsUrl(selected);
+  if (mapsUrl) {
+    msg += `\nTap to navigate:\n${mapsUrl}`;
+  }
+
+  try {
+    await fetch('/api/send-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    alert('Sent to Telegram!');
+  } catch (e) {
+    alert('Failed: ' + e.message);
+  }
+}
+
+// ============================================================
+// CUSTOMER COMMS PANEL
+// ============================================================
+function showCommsPanel() {
+  const selected = getSelectedStops();
+  if (selected.length === 0) { alert('No stops selected'); return; }
+
+  const day = prompt('What day are the pickups? (e.g. Thursday)', 'Thursday');
+  if (!day) return;
+
+  // Generate reminder texts
+  let html = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;padding:20px">';
+  html += '<div style="max-width:600px;margin:0 auto;background:#16213e;border-radius:12px;padding:20px">';
+  html += `<h2 style="color:#2ecc40;margin-bottom:16px">Customer Texts — ${day} (${selected.length} stops)</h2>`;
+
+  html += '<h3 style="color:#e67e22;margin:12px 0 8px">Evening Reminders (send 2 nights before):</h3>';
+  selected.forEach(s => {
+    const items = s.appliances.join(', ') || 'whiteware pickup';
+    const msg = `Hey ${s.first_name}, just a reminder I've got you booked in for ${day} for ${items}. I'll text you when I'm on my way :)`;
+    html += `<div style="background:#1a1a2e;padding:10px;margin:6px 0;border-radius:6px">`;
+    html += `<div style="color:#8fbc8f;font-size:12px">${s.first_name} ${s.last_name} — ${s.phone}</div>`;
+    html += `<div style="color:#fff;margin-top:4px;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent).then(()=>this.style.color='#2ecc40')">${msg}</div>`;
+    html += `</div>`;
+  });
+
+  html += '<h3 style="color:#3498db;margin:16px 0 8px">On-My-Way Texts (morning of):</h3>';
+  selected.forEach(s => {
+    const msg = `Hey ${s.first_name}, just heading your way now — should be about 20 mins :)`;
+    html += `<div style="background:#1a1a2e;padding:10px;margin:6px 0;border-radius:6px">`;
+    html += `<div style="color:#8fbc8f;font-size:12px">${s.first_name} ${s.last_name} — ${s.phone}</div>`;
+    html += `<div style="color:#fff;margin-top:4px;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent).then(()=>this.style.color='#2ecc40')">${msg}</div>`;
+    html += `</div>`;
+  });
+
+  html += '<h3 style="color:#9b59b6;margin:16px 0 8px">Review Requests (1-2 days after):</h3>';
+  selected.forEach(s => {
+    const items = s.appliances.join(', ') || 'whiteware pickup';
+    const msg = `Hey ${s.first_name}, hope the ${items} went well! If you've got a sec, a quick Google review would be awesome — really helps out. Cheers :)`;
+    html += `<div style="background:#1a1a2e;padding:10px;margin:6px 0;border-radius:6px">`;
+    html += `<div style="color:#8fbc8f;font-size:12px">${s.first_name} ${s.last_name} — ${s.phone}</div>`;
+    html += `<div style="color:#fff;margin-top:4px;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent).then(()=>this.style.color='#2ecc40')">${msg}</div>`;
+    html += `</div>`;
+  });
+
+  html += '<div style="margin-top:16px;display:flex;gap:8px">';
+  html += '<button onclick="sendAllRemindersToTelegram(\'' + day + '\')" style="flex:1;padding:12px;background:#9b59b6;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer">Send All to Telegram</button>';
+  html += '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="flex:1;padding:12px;background:#555;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer">Close</button>';
+  html += '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function sendAllRemindersToTelegram(day) {
+  const selected = getSelectedStops();
+  let msg = `<b>Reminder texts for ${day}:</b>\n\n`;
+  selected.forEach(s => {
+    const items = s.appliances.join(', ') || 'whiteware pickup';
+    const reminder = `Hey ${s.first_name}, just a reminder I've got you booked in for ${day} for ${items}. I'll text you when I'm on my way :)`;
+    msg += `<b>${s.first_name}</b> (${s.phone}):\n<i>${reminder}</i>\n\n`;
+  });
+
+  try {
+    await fetch('/api/send-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    alert('All reminders sent to Telegram!');
+  } catch (e) {
+    alert('Failed: ' + e.message);
+  }
+}
+
+// Helper: get selected stops data
+function getSelectedStops() {
+  const checked = document.querySelectorAll('.stop-checkbox:checked');
+  const selected = [];
+  checked.forEach(cb => {
+    const idx = parseInt(cb.dataset.index);
+    if (!isNaN(idx) && allStops[idx]) {
+      selected.push(allStops[idx]);
+    }
+  });
+  // If none specifically checked, return all
+  return selected.length > 0 ? selected : allStops;
+}
+
+// Helper: build Google Maps URL for selected stops (used by sendRouteToTelegram)
+function buildGoogleMapsUrl(stops) {
+  const start = '-39.1567,174.2064';
+  const end = '-39.0360,174.1017';
+  const waypoints = stops.slice(0, 9).map(s => {
+    if (s._lat && s._lon) return `${s._lat},${s._lon}`;
+    return encodeURIComponent(`${s.street}, ${s.town}, NZ`);
+  });
+  return 'https://www.google.com/maps/dir/' + [start, ...waypoints, end].join('/');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+initMap();
+loadPickups();
+</script>
+</body>
+</html>
