@@ -122,10 +122,50 @@ def update_geocache():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/sync-sheets", methods=["POST"])
-def sync_sheets():
-    """Sync is local-only (runs pickup-sync.py on Woody's computer)."""
-    return jsonify({"status": "ok", "output": "Sync runs automatically on your computer every 30 min"})
+@app.route("/api/mark-collected", methods=["POST"])
+def mark_collected():
+    """Mark a pickup as collected — stores in local file, synced back to sheet by local script."""
+    try:
+        data = request.get_json()
+        sub_id = data.get("submission_id", "")
+        name = data.get("name", "")
+
+        # Store collected items in a JSON file
+        collected_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "collected.json")
+        collected = []
+        if os.path.exists(collected_file):
+            try:
+                with open(collected_file, "r") as f:
+                    collected = json.load(f)
+            except:
+                collected = []
+
+        from datetime import datetime
+        collected.append({
+            "submission_id": sub_id,
+            "name": name,
+            "collected_at": datetime.now().isoformat()
+        })
+
+        with open(collected_file, "w") as f:
+            json.dump(collected, f, indent=2)
+
+        return jsonify({"status": "ok", "count": len(collected)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/collected", methods=["GET"])
+def get_collected():
+    """Get list of collected submission IDs."""
+    collected_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "collected.json")
+    if os.path.exists(collected_file):
+        try:
+            with open(collected_file, "r") as f:
+                return jsonify(json.load(f))
+        except:
+            pass
+    return jsonify([])
 
 
 if __name__ == "__main__":
