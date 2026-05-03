@@ -547,7 +547,7 @@ h2 {
   left: 14px;
   bottom: 132px;
   z-index: 520;
-  display: flex;
+  display: none;
   align-items: center;
   gap: 10px;
   min-height: 48px;
@@ -556,6 +556,10 @@ h2 {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.78);
   box-shadow: var(--shadow);
+}
+
+#routeView.map-expanded .savings-chip {
+  display: flex;
 }
 
 .savings-chip span {
@@ -596,6 +600,14 @@ h2 {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.map-tools .map-run-action {
+  display: none;
+}
+
+#routeView.map-expanded .map-tools .map-run-action {
+  display: inline-flex;
 }
 
 .route-list-panel {
@@ -823,6 +835,17 @@ h2 {
   border-color: rgba(239, 91, 91, 0.5);
 }
 
+.route-stop .stop-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.route-stop .mini-btn {
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 850;
+}
+
 .order-badge {
   display: inline-grid;
   place-items: center;
@@ -857,6 +880,29 @@ h2 {
   border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 14px;
+}
+
+.simple-run-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.simple-run-tools strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.simple-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .customer-toolbar input {
@@ -1138,13 +1184,112 @@ h2 {
 .custom-pin {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
   border: 2px solid #ffffff;
   border-radius: 999px;
   color: #ffffff;
   font-weight: 900;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+  line-height: 1;
+}
+
+.custom-pin.is-current {
+  border-color: #ffd166;
+  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.55), 0 6px 18px rgba(0, 0, 0, 0.6);
+  animation: pulseCurrent 1.6s ease-in-out infinite;
+}
+
+@keyframes pulseCurrent {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.55), 0 6px 18px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 209, 102, 0.18), 0 6px 18px rgba(0, 0, 0, 0.6); }
+}
+
+.trip-banner {
+  margin: 0;
+  padding: 16px;
+  background: linear-gradient(180deg, #1b3221 0%, #0f1d14 100%);
+  border-bottom: 1px solid rgba(53, 201, 111, 0.35);
+  color: var(--text);
+}
+
+#routeView.in-trip-mode .trip-bar {
+  display: none;
+}
+
+.trip-banner-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.trip-banner-eyebrow {
+  color: #a9f0c4;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.trip-banner-exit {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.trip-banner-name {
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 1.15;
+  margin-bottom: 4px;
+}
+
+.trip-banner-addr {
+  font-size: 14px;
+  color: #d2deea;
+  line-height: 1.35;
+}
+
+.trip-banner-items {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.trip-banner-items a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.trip-banner-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.trip-banner-actions .primary-btn,
+.trip-banner-actions .soft-btn {
+  min-height: 50px;
+  font-size: 15px;
+}
+
+@media (max-width: 720px) {
+  .trip-banner {
+    padding: 14px;
+  }
+  .trip-banner-name {
+    font-size: 19px;
+  }
+  .trip-banner-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -1259,6 +1404,16 @@ h2 {
 
   .panel-head {
     flex-direction: column;
+  }
+
+  .simple-run-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .simple-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .corridor-row,

@@ -36,8 +36,6 @@
       </div>
     </div>
     <div class="top-actions">
-      <a class="ghost-link" href="/classic" title="Open the previous route planner">Classic</a>
-      <button class="icon-btn" id="demoBtn" type="button" title="Load demo pickups">Demo</button>
       <button class="primary-btn" id="refreshBtn" type="button">Refresh</button>
     </div>
   </header>
@@ -46,8 +44,6 @@
     <button class="tab active" data-view="route" type="button">Route</button>
     <button class="tab" data-view="customers" type="button">Stops</button>
     <button class="tab" data-view="texts" type="button">Texts</button>
-    <button class="tab" data-view="dashboard" type="button">Plan</button>
-    <button class="tab" data-view="admin" type="button">Admin</button>
   </nav>
 
   <main class="shell">
@@ -131,8 +127,8 @@
             <strong id="savingsText">0 stops</strong>
           </div>
           <div class="map-tools">
-            <button class="primary-btn" id="optimizeBtn" type="button">Optimise</button>
-            <button class="soft-btn" id="gmapsBtn" type="button">Google Maps</button>
+            <button class="primary-btn map-run-action" id="optimizeBtn" type="button">Reorganise</button>
+            <button class="soft-btn map-run-action" id="gmapsBtn" type="button">Start</button>
             <button class="soft-btn" id="fitMapBtn" type="button">Big map</button>
           </div>
         </section>
@@ -147,7 +143,7 @@
           <div class="route-summary-strip" id="routeSummaryStrip"></div>
           <div class="stop-list route-list" id="routeList"></div>
           <div class="trip-bar">
-            <button class="soft-btn square-btn" id="routeLoadBtn" type="button">Load</button>
+            <button class="soft-btn square-btn" id="routeLoadBtn" type="button">Stops</button>
             <button class="soft-btn" id="routeReorganiseBtn" type="button">Reorganise</button>
             <button class="primary-btn" id="routeStartBtn" type="button">Start trip</button>
           </div>
@@ -157,18 +153,29 @@
 
     <section class="view" id="customersView">
       <section class="panel">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Stops</p>
-            <h2>Open pickups, cleanup, and quick actions</h2>
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Stops</p>
+              <h2>Pick what goes on today's run</h2>
+            </div>
+            <div class="inline-controls">
+              <input id="searchInput" type="search" placeholder="Search name, phone, address">
+              <button class="soft-btn" id="clearRouteQuickBtn" type="button">Clear run</button>
+              <button class="soft-btn" id="toolsBtn" type="button">Fix data</button>
+            </div>
           </div>
-          <div class="inline-controls">
-            <input id="searchInput" type="search" placeholder="Search name, phone, address">
-            <button class="soft-btn" id="exportCsvBtn" type="button">Export CSV</button>
+        <div class="simple-run-tools">
+          <div>
+            <span class="label">Selected load</span>
+            <strong id="mobileLoadSummary">0 spaces</strong>
+          </div>
+          <div class="simple-actions">
+            <button class="primary-btn" id="selectVisibleQuickBtn" type="button">Use shown</button>
+            <button class="soft-btn" id="fillLoadQuickBtn" type="button">One full load</button>
           </div>
         </div>
         <div class="customer-toolbar">
-          <label><input id="onlySelectedToggle" type="checkbox"> Selected only</label>
+          <label><input id="onlySelectedToggle" type="checkbox"> Chosen only</label>
           <label><input id="missingCoordsToggle" type="checkbox"> Missing map pin</label>
           <label><input id="missingPhoneToggle" type="checkbox"> Missing phone</label>
         </div>
@@ -197,7 +204,6 @@
             <button data-message-mode="problem" type="button">Issue</button>
           </div>
           <div class="action-row">
-            <button class="primary-btn" id="sendAllSmsBtn" type="button">Send all by SMS</button>
             <button class="soft-btn" id="copyAllTextsBtn" type="button">Copy all texts</button>
             <button class="soft-btn" id="printRunSheetBtn" type="button">Print run sheet</button>
           </div>

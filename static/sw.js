@@ -1,4 +1,4 @@
-const CACHE_NAME = "naki-wreck-ops-v1";
+const CACHE_NAME = "naki-wreck-ops-v2";
 const APP_SHELL = [
   "/",
   "/manifest.json",

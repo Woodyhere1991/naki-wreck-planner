@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var START = { lat: -39.1567, lng: 174.2064, label: "10 Tawa St, Inglewood" };
-  var DROPOFF = { lat: -39.0360, lng: 174.1017, label: "Global Metal Solutions, Bell Block" };
+  var START = { lat: -39.1611, lng: 174.2066, label: "10 Tawa St, Inglewood" };
+  var DROPOFF = { lat: -39.0323, lng: 174.1651, label: "Global Metal Solutions, 146 Connett Rd East, Bell Block" };
   var TRAILER_CAP = 18;
   var UTE_CAP = 8;
   var MAX_GOOGLE_STOPS = 9;
@@ -127,7 +127,9 @@
     map: null,
     markers: new Map(),
     routeLayer: null,
-    mapReady: false
+    mapReady: false,
+    tripMode: false,
+    tripCurrentId: null
   };
 
   var el = {};
@@ -160,7 +162,8 @@
       "addStopModal", "closeAddStopModalBtn", "quickAddressInput", "quickAddressBtn",
       "csvStopInput", "bulkPasteToggle", "manualStopFocusBtn", "bulkPasteBox",
       "bulkStopsInput", "addBulkStopsBtn", "quickDraftForm", "toast",
-      "sendAllSmsBtn"
+      "sendAllSmsBtn", "mobileLoadSummary", "clearRouteQuickBtn", "toolsBtn",
+      "selectVisibleQuickBtn", "fillLoadQuickBtn"
     ].forEach(function (id) {
       el[id] = document.getElementById(id);
     });
@@ -174,7 +177,7 @@
     });
 
     el.refreshBtn.addEventListener("click", function () { loadPickups(false); });
-    el.demoBtn.addEventListener("click", function () { loadPickups(true); });
+    if (el.demoBtn) el.demoBtn.addEventListener("click", function () { loadPickups(true); });
     el.selectVisibleBtn.addEventListener("click", selectVisibleStops);
     el.deselectVisibleBtn.addEventListener("click", deselectVisibleStops);
     el.selectCapacityBtn.addEventListener("click", selectOneTrailerLoad);
@@ -184,10 +187,14 @@
     el.fitMapBtn.addEventListener("click", toggleBigMap);
     el.routeSearchBtn.addEventListener("click", openAddStopModal);
     el.routeAddBtn.addEventListener("click", openAddStopModal);
-    el.routeLoadBtn.addEventListener("click", function () { setView("dashboard"); });
+    el.routeLoadBtn.addEventListener("click", function () { setView("customers"); });
     el.routeReorganiseBtn.addEventListener("click", optimizeRoute);
-    el.routeStartBtn.addEventListener("click", openMapsModal);
-    el.exportCsvBtn.addEventListener("click", exportCsv);
+    el.routeStartBtn.addEventListener("click", startTrip);
+    if (el.exportCsvBtn) el.exportCsvBtn.addEventListener("click", exportCsv);
+    if (el.clearRouteQuickBtn) el.clearRouteQuickBtn.addEventListener("click", clearRoute);
+    if (el.toolsBtn) el.toolsBtn.addEventListener("click", function () { setView("admin"); });
+    if (el.selectVisibleQuickBtn) el.selectVisibleQuickBtn.addEventListener("click", selectVisibleStops);
+    if (el.fillLoadQuickBtn) el.fillLoadQuickBtn.addEventListener("click", selectOneTrailerLoad);
     el.copyAllTextsBtn.addEventListener("click", copyAllTexts);
     if (el.sendAllSmsBtn) el.sendAllSmsBtn.addEventListener("click", sendAllSms);
     el.printRunSheetBtn.addEventListener("click", function () {
@@ -584,6 +591,7 @@
     renderTexts();
     renderCleanup();
     renderMap();
+    renderTripBanner();
     setSyncLine();
   }
 
@@ -619,6 +627,10 @@
     var utePct = UTE_CAP ? Math.min(100, (ute / UTE_CAP) * 100) : 0;
 
     el.loadTotalText.textContent = spaces + " spaces";
+    if (el.mobileLoadSummary) {
+      el.mobileLoadSummary.textContent = spaces + " spaces - " + selectedStops().length + " stop" +
+        (selectedStops().length === 1 ? "" : "s");
+    }
     el.loadStatusPill.textContent = status.shortLabel;
     el.loadStatusPill.className = "status-pill " + status.kind;
     el.trailerText.textContent = trailer + " / " + TRAILER_CAP;
@@ -713,14 +725,18 @@
     ].map(function (item) {
       return '<div><span>' + escapeHtml(item[0]) + '</span><strong>' + escapeHtml(String(item[1])) + '</strong></div>';
     }).join("");
-    el.routeList.innerHTML = stops.length ? stops.map(stopCardHtml).join("") :
-      '<p class="hint">Select pickups from the dashboard or customer view, then tap Optimise.</p>';
+    el.routeList.innerHTML = stops.length ? stops.map(function (stop) {
+      return stopCardHtml(stop, "route");
+    }).join("") :
+      '<p class="hint">Choose stops from Stops, then tap Reorganise.</p>';
     renderMap();
   }
 
   function renderCustomers() {
     var stops = filteredCustomerStops();
-    el.customerList.innerHTML = stops.length ? stops.map(stopCardHtml).join("") :
+    el.customerList.innerHTML = stops.length ? stops.map(function (stop) {
+      return stopCardHtml(stop, "stops");
+    }).join("") :
       '<p class="hint">No pickups match those filters.</p>';
   }
 
@@ -795,7 +811,11 @@
     // Group stops that share an identical coord (e.g. multiple town-fallback
     // pins from the same town) so we can jitter them apart and every stop
     // is visible on the map.
-    var stops = visibleMapStops().filter(function (s) { return s.coords; });
+    // Only show pins for stops the user has selected. Keeps the map clean
+    // and matches Woody's "lock the route, then go" workflow.
+    var stops = visibleMapStops().filter(function (s) {
+      return s.coords && state.selectedIds.has(s.id);
+    });
     var coordGroups = {};
     stops.forEach(function (stop) {
       var key = stop.coords.lat.toFixed(4) + "," + stop.coords.lng.toFixed(4);
@@ -809,20 +829,15 @@
       var lng = stop.coords.lng;
       if (group.length > 1) {
         var i = group.indexOf(stop);
-        // Spread up to 12 stops in a 60m radius circle around the shared point.
-        // 0.0006 ≈ ~65m at NZ latitudes.
         var angle = (2 * Math.PI * i) / group.length;
         lat += Math.cos(angle) * 0.0006;
         lng += Math.sin(angle) * 0.0008;
       }
-      var selected = state.selectedIds.has(stop.id);
-      // Pin label: stop number once Reorganise has been tapped, otherwise
-      // blank so we don't confuse identical "1 item" labels with each other.
+      var isCurrent = state.tripCurrentId === stop.id;
       var label = stop.routeOrder ? String(stop.routeOrder) : "";
       var marker = L.marker([lat, lng], {
-        icon: makePin(CORRIDOR_COLORS[stop.corridor] || "#a685ff", label),
-        opacity: selected ? 1 : 0.55,
-        zIndexOffset: selected ? 500 : 0
+        icon: makePin(CORRIDOR_COLORS[stop.corridor] || "#a685ff", label, isCurrent),
+        zIndexOffset: isCurrent ? 800 : 500
       }).addTo(state.map);
       var precision = stop.coordQuality === "town"
         ? '<br><em>Approximate (town centre) - check the address before driving</em>'
@@ -849,30 +864,35 @@
     }
   }
 
-  function stopCardHtml(stop) {
+  function stopCardHtml(stop, mode) {
+    mode = mode || "stops";
     var selected = state.selectedIds.has(stop.id);
     var order = stop.routeOrder ? '<span class="order-badge">' + stop.routeOrder + '</span>' : "";
     var phone = stop.phone ? '<a href="tel:' + escapeAttr(stop.phone) + '">' + escapeHtml(stop.phone) + '</a>' : "No phone";
     var maps = "https://www.google.com/maps/dir/?api=1&destination=" +
       encodeURIComponent(fullAddress(stop));
-    return '<article class="stop-card ' + stop.corridor + (selected ? " selected" : "") + '">' +
+    var includeControl = mode === "route" ? "" :
+      '<label class="tag ' + (selected ? "good" : "") + '"><input type="checkbox" data-action="toggle" data-id="' +
+      escapeAttr(stop.id) + '"' + (selected ? " checked" : "") + '> Include</label>';
+    var stopActions = '<button class="mini-btn primary" type="button" data-action="navigate" data-id="' +
+      escapeAttr(stop.id) + '">Navigate</button>';
+    if (mode !== "route") {
+      stopActions += '<button class="mini-btn" type="button" data-action="focus" data-id="' + escapeAttr(stop.id) + '">Show</button>' +
+        '<button class="mini-btn" type="button" data-action="select-only" data-id="' + escapeAttr(stop.id) + '">Only this</button>';
+    }
+    stopActions += '<button class="mini-btn danger" type="button" data-action="collect" data-id="' + escapeAttr(stop.id) + '">' +
+      (state.pendingCollectIds.has(stop.id) ? "Tap again" : "Collected") + '</button>';
+    return '<article class="stop-card ' + (mode === "route" ? "route-stop " : "") + stop.corridor + (selected ? " selected" : "") + '">' +
       '<div class="stop-top"><div><div class="stop-name">' + order + escapeHtml(stop.name) +
       (stop.isDraft ? ' <span class="tag warn">Local</span>' : "") + '</div>' +
       '<div class="stop-meta"><a href="' + maps + '" target="_blank" rel="noopener">' +
       escapeHtml([stop.street, stop.town].filter(Boolean).join(", ")) + '</a></div>' +
       '<div class="stop-meta">' + phone + ' - ' + CORRIDOR_LABELS[stop.corridor] + ' - ' +
       stop.spaces + ' space(s)' + coordBadge(stop) + '</div></div>' +
-      '<label class="tag ' + (selected ? "good" : "") + '"><input type="checkbox" data-action="toggle" data-id="' +
-      escapeAttr(stop.id) + '"' + (selected ? " checked" : "") + '> Include</label></div>' +
+      includeControl + '</div>' +
       '<div class="stop-items">' + escapeHtml(stop.appliances.join(", ") || "Item not listed") + '</div>' +
       (stop.notes.length ? '<div class="stop-meta">' + escapeHtml(stop.notes.join(" | ")) + '</div>' : "") +
-      '<div class="stop-actions">' +
-      '<button class="mini-btn primary" type="button" data-action="navigate" data-id="' + escapeAttr(stop.id) + '">Navigate</button>' +
-      '<button class="mini-btn" type="button" data-action="focus" data-id="' + escapeAttr(stop.id) + '">Show</button>' +
-      '<button class="mini-btn" type="button" data-action="select-only" data-id="' + escapeAttr(stop.id) + '">Only this</button>' +
-      '<button class="mini-btn danger" type="button" data-action="collect" data-id="' + escapeAttr(stop.id) + '">' +
-      (state.pendingCollectIds.has(stop.id) ? "Tap again" : "Collected") + '</button>' +
-      '</div></article>';
+      '<div class="stop-actions">' + stopActions + '</div></article>';
   }
 
   function coordBadge(stop) {
@@ -1072,6 +1092,167 @@
 
   function closeMapsModal() {
     el.mapsModal.hidden = true;
+  }
+
+  // ---------- TRIP MODE: step-by-step pickup flow ----------
+
+  function startTrip() {
+    var stops = orderedSelectedStops().filter(function (s) { return s.coords; });
+    if (!stops.length) {
+      toast("Pick stops first, then tap Reorganise");
+      return;
+    }
+    if (!state.routeOrder.length) {
+      var ok = window.confirm(
+        "Route hasn't been organised yet. Run Reorganise first to put the stops in driving order?"
+      );
+      if (!ok) return;
+      optimizeRoute().then(function () { setTimeout(startTrip, 200); });
+      return;
+    }
+    state.tripMode = true;
+    state.tripCurrentId = nextTripStopId();
+    renderTripBanner();
+    renderMap();
+    setView("route");
+    toast("Trip started - " + stops.length + " stops to do");
+  }
+
+  function nextTripStopId() {
+    var ordered = orderedSelectedStops();
+    for (var i = 0; i < ordered.length; i++) {
+      if (!state.collectedIds.has(ordered[i].submissionIds[0] || ordered[i].id)) {
+        return ordered[i].id;
+      }
+    }
+    return null; // all done
+  }
+
+  function tripCurrentStop() {
+    if (!state.tripCurrentId) return null;
+    return state.stops.find(function (s) { return s.id === state.tripCurrentId; }) || null;
+  }
+
+  function tripPosition() {
+    var ordered = orderedSelectedStops();
+    var current = tripCurrentStop();
+    if (!current) return { index: ordered.length, total: ordered.length };
+    var idx = ordered.findIndex(function (s) { return s.id === current.id; });
+    return { index: idx + 1, total: ordered.length };
+  }
+
+  function tripNavigateCurrent() {
+    var stop = tripCurrentStop();
+    if (!stop) {
+      // All done — open dropoff
+      var url = "https://www.google.com/maps/dir/?api=1&destination=" +
+                DROPOFF.lat + "," + DROPOFF.lng + "&travelmode=driving";
+      window.open(url, "_blank", "noopener");
+      toast("Opening drop-off in Google Maps");
+      return;
+    }
+    var dest = stop.coords
+      ? stop.coords.lat + "," + stop.coords.lng
+      : encodeURIComponent(fullAddress(stop));
+    window.open(
+      "https://www.google.com/maps/dir/?api=1&destination=" + dest + "&travelmode=driving",
+      "_blank", "noopener"
+    );
+    toast("Opening " + stop.name + " in Google Maps");
+  }
+
+  function tripDoneAndNext() {
+    var stop = tripCurrentStop();
+    if (!stop) {
+      exitTrip();
+      return;
+    }
+    var ids = stop.submissionIds.length ? stop.submissionIds : [stop.id];
+    ids.forEach(function (id) { state.collectedIds.add(id); });
+    if (stop.isDraft) removeDraftByStop(stop);
+    state.routeOrder = state.routeOrder.filter(function (id) { return id !== stop.id; });
+    state.selectedIds.delete(stop.id);
+    saveCollectedState();
+    saveSelectedState();
+    fetch("/api/mark-collected", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_ids: ids, submission_id: ids[0], name: stop.name })
+    }).catch(function () { /* offline ok */ });
+    state.tripCurrentId = nextTripStopId();
+    renderAll();
+    if (state.tripCurrentId) {
+      var nx = tripCurrentStop();
+      toast("Done. Next: " + nx.name);
+    } else {
+      toast("All pickups done. Drive to drop-off.");
+    }
+  }
+
+  function exitTrip() {
+    state.tripMode = false;
+    state.tripCurrentId = null;
+    var banner = document.getElementById("tripBanner");
+    if (banner) banner.remove();
+    renderAll();
+    toast("Trip ended");
+  }
+
+  function renderTripBanner() {
+    var panel = document.querySelector("#routeView .route-list-panel");
+    if (!panel) return;
+    var existing = document.getElementById("tripBanner");
+    var routeView = document.getElementById("routeView");
+    if (routeView) routeView.classList.toggle("in-trip-mode", !!state.tripMode);
+    if (!state.tripMode) {
+      if (existing) existing.remove();
+      return;
+    }
+    var stop = tripCurrentStop();
+    var pos = tripPosition();
+    var inner;
+    if (stop) {
+      inner = '<div class="trip-banner-head">' +
+        '<span class="trip-banner-eyebrow">Stop ' + pos.index + ' of ' + pos.total + '</span>' +
+        '<button class="trip-banner-exit" type="button" data-action="trip-exit">Exit trip</button>' +
+        '</div>' +
+        '<div class="trip-banner-name">' + escapeHtml(stop.name) + '</div>' +
+        '<div class="trip-banner-addr">' + escapeHtml([stop.street, stop.town].filter(Boolean).join(", ")) + '</div>' +
+        '<div class="trip-banner-items">' + escapeHtml(stop.appliances.join(", ") || "Item not listed") +
+        ' - ' + stop.spaces + ' space(s)' + (stop.phone ? ' - <a href="tel:' + escapeAttr(stop.phone) + '">' + escapeHtml(stop.phone) + '</a>' : '') + '</div>' +
+        '<div class="trip-banner-actions">' +
+        '<button class="primary-btn" type="button" data-action="trip-nav">Open in Google Maps</button>' +
+        '<button class="soft-btn" type="button" data-action="trip-done">Collected, next stop</button>' +
+        '</div>';
+    } else {
+      inner = '<div class="trip-banner-head">' +
+        '<span class="trip-banner-eyebrow">All pickups done</span>' +
+        '<button class="trip-banner-exit" type="button" data-action="trip-exit">Exit trip</button>' +
+        '</div>' +
+        '<div class="trip-banner-name">Drive to drop-off</div>' +
+        '<div class="trip-banner-addr">' + escapeHtml(DROPOFF.label) + '</div>' +
+        '<div class="trip-banner-actions">' +
+        '<button class="primary-btn" type="button" data-action="trip-nav">Open drop-off in Google Maps</button>' +
+        '<button class="soft-btn" type="button" data-action="trip-exit">End trip</button>' +
+        '</div>';
+    }
+    if (existing) {
+      existing.innerHTML = inner;
+    } else {
+      var div = document.createElement("div");
+      div.id = "tripBanner";
+      div.className = "trip-banner";
+      div.innerHTML = inner;
+      panel.insertBefore(div, panel.firstChild);
+      div.addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-action]");
+        if (!btn) return;
+        var a = btn.dataset.action;
+        if (a === "trip-nav") tripNavigateCurrent();
+        else if (a === "trip-done") tripDoneAndNext();
+        else if (a === "trip-exit") exitTrip();
+      });
+    }
   }
 
   function buildGoogleMapsLinks(stops) {
@@ -1627,13 +1808,17 @@
     return Math.abs(hash).toString(36);
   }
 
-  function makePin(color, label) {
+  function makePin(color, label, isCurrent) {
+    var size = isCurrent ? 32 : 20;
+    var cls = "custom-pin" + (isCurrent ? " is-current" : "");
     return L.divIcon({
       className: "",
-      html: '<div class="custom-pin" style="background:' + color + '">' + escapeHtml(label) + '</div>',
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-      popupAnchor: [0, -16]
+      html: '<div class="' + cls + '" style="background:' + color +
+            ';width:' + size + 'px;height:' + size + 'px;font-size:' + (isCurrent ? 14 : 11) + 'px">' +
+            escapeHtml(label || "") + '</div>',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      popupAnchor: [0, -size / 2]
     });
   }
 
