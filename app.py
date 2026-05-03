@@ -289,6 +289,80 @@ def sync_sheets():
         return jsonify({"error": str(e), "output": "Sync failed"}), 500
 
 
+@app.route("/api/send-sms", methods=["POST"])
+def send_sms():
+    """Send SMS via ClickSend. Body: {"messages": [{"to":"+64...", "body":"..."}]}.
+    Requires CLICKSEND_USERNAME + CLICKSEND_API_KEY env vars."""
+    try:
+        import base64
+        data = request.get_json()
+        messages = data.get("messages") or []
+        if not messages:
+            return jsonify({"error": "No messages provided"}), 400
+
+        username = os.environ.get("CLICKSEND_USERNAME", "").strip()
+        api_key = os.environ.get("CLICKSEND_API_KEY", "").strip()
+        if not username or not api_key:
+            return jsonify({
+                "status": "skipped",
+                "error": "ClickSend credentials not configured. Set CLICKSEND_USERNAME and CLICKSEND_API_KEY env vars.",
+            }), 200
+
+        sender = os.environ.get("CLICKSEND_FROM", "NakiWreck")[:11]
+        prepared = []
+        for m in messages:
+            to = str(m.get("to", "")).strip()
+            body = str(m.get("body", "")).strip()
+            if not to or not body:
+                continue
+            # Normalise NZ mobile to E.164
+            digits = "".join(c for c in to if c.isdigit() or c == "+")
+            if digits.startswith("0"):
+                digits = "+64" + digits[1:]
+            elif digits.startswith("64") and not digits.startswith("+64"):
+                digits = "+" + digits
+            elif not digits.startswith("+"):
+                digits = "+64" + digits
+            prepared.append({
+                "source": "naki-ops",
+                "from": sender,
+                "to": digits,
+                "body": body[:1600],
+            })
+
+        if not prepared:
+            return jsonify({"error": "No valid phone numbers in messages"}), 400
+
+        auth = base64.b64encode(f"{username}:{api_key}".encode()).decode()
+        body = json.dumps({"messages": prepared}).encode("utf-8")
+        req = urllib.request.Request(
+            "https://rest.clicksend.com/v3/sms/send",
+            data=body,
+            headers={
+                "Authorization": "Basic " + auth,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=15)
+            result = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            return jsonify({"status": "error", "http": he.code, "body": err_body[:500]}), 500
+
+        sent = (result.get("data") or {}).get("messages") or []
+        ok = [m for m in sent if str(m.get("status", "")).upper() == "SUCCESS"]
+        return jsonify({
+            "status": "ok",
+            "requested": len(prepared),
+            "sent": len(ok),
+            "raw": result.get("response_msg") or result.get("response_code") or "",
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/send-telegram", methods=["POST"])
 def send_telegram():
     """Send a message to Woody's Telegram via the ClaudeClaw bot.

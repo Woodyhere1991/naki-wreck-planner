@@ -159,7 +159,8 @@
       "findPinsBtn", "cleanupList", "mapsModal", "closeMapsModalBtn", "mapsLinks",
       "addStopModal", "closeAddStopModalBtn", "quickAddressInput", "quickAddressBtn",
       "csvStopInput", "bulkPasteToggle", "manualStopFocusBtn", "bulkPasteBox",
-      "bulkStopsInput", "addBulkStopsBtn", "quickDraftForm", "toast"
+      "bulkStopsInput", "addBulkStopsBtn", "quickDraftForm", "toast",
+      "sendAllSmsBtn"
     ].forEach(function (id) {
       el[id] = document.getElementById(id);
     });
@@ -188,6 +189,7 @@
     el.routeStartBtn.addEventListener("click", openMapsModal);
     el.exportCsvBtn.addEventListener("click", exportCsv);
     el.copyAllTextsBtn.addEventListener("click", copyAllTexts);
+    if (el.sendAllSmsBtn) el.sendAllSmsBtn.addEventListener("click", sendAllSms);
     el.printRunSheetBtn.addEventListener("click", function () {
       setView("texts");
       setTimeout(function () { window.print(); }, 100);
@@ -1343,6 +1345,48 @@
       return;
     }
     copyToClipboard(texts.join("\n\n"));
+  }
+
+  async function sendAllSms() {
+    var stops = orderedSelectedStops().filter(function (s) { return s.phone; });
+    if (!stops.length) {
+      toast("No selected stops with phone numbers");
+      return;
+    }
+    var day = el.pickupDayInput.value.trim() || "Thursday";
+    var modeLabels = { reminder: "Reminder", onway: "On my way", review: "Review", problem: "Issue" };
+    var ok = window.confirm(
+      "Send the " + (modeLabels[state.messageMode] || state.messageMode).toLowerCase() +
+      " text to " + stops.length + " customer(s) via ClickSend SMS?\n\n" +
+      "Each text costs about 5 cents. Total: ~$" + (stops.length * 0.05).toFixed(2) + " NZD."
+    );
+    if (!ok) return;
+
+    el.sendAllSmsBtn.disabled = true;
+    el.sendAllSmsBtn.textContent = "Sending...";
+    try {
+      var messages = stops.map(function (stop) {
+        return { to: stop.phone, body: buildMessage(stop, state.messageMode, day) };
+      });
+      var response = await fetch("/api/send-sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: messages }),
+      });
+      var data = await response.json();
+      if (data.status === "skipped") {
+        toast("ClickSend not configured - paste your API key into the laptop's APP env");
+      } else if (data.status === "ok") {
+        toast("Sent " + data.sent + " of " + data.requested + " texts");
+      } else {
+        toast("SMS error: " + (data.error || data.status || "unknown"));
+      }
+    } catch (err) {
+      toast("SMS request failed: " + err.message);
+    } finally {
+      el.sendAllSmsBtn.disabled = false;
+      el.sendAllSmsBtn.textContent = "Send all by SMS";
+    }
   }
 
   function buildMessage(stop, mode, day) {
