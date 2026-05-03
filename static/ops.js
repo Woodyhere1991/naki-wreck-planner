@@ -789,22 +789,47 @@
     }
 
     var bounds = [[START.lat, START.lng], [DROPOFF.lat, DROPOFF.lng]];
-    visibleMapStops().forEach(function (stop) {
-      if (!stop.coords) return;
+
+    // Group stops that share an identical coord (e.g. multiple town-fallback
+    // pins from the same town) so we can jitter them apart and every stop
+    // is visible on the map.
+    var stops = visibleMapStops().filter(function (s) { return s.coords; });
+    var coordGroups = {};
+    stops.forEach(function (stop) {
+      var key = stop.coords.lat.toFixed(4) + "," + stop.coords.lng.toFixed(4);
+      (coordGroups[key] = coordGroups[key] || []).push(stop);
+    });
+
+    stops.forEach(function (stop) {
+      var key = stop.coords.lat.toFixed(4) + "," + stop.coords.lng.toFixed(4);
+      var group = coordGroups[key];
+      var lat = stop.coords.lat;
+      var lng = stop.coords.lng;
+      if (group.length > 1) {
+        var i = group.indexOf(stop);
+        // Spread up to 12 stops in a 60m radius circle around the shared point.
+        // 0.0006 ≈ ~65m at NZ latitudes.
+        var angle = (2 * Math.PI * i) / group.length;
+        lat += Math.cos(angle) * 0.0006;
+        lng += Math.sin(angle) * 0.0008;
+      }
       var selected = state.selectedIds.has(stop.id);
       var label = stop.routeOrder ? String(stop.routeOrder) : String(stop.spaces);
-      var marker = L.marker([stop.coords.lat, stop.coords.lng], {
+      var marker = L.marker([lat, lng], {
         icon: makePin(CORRIDOR_COLORS[stop.corridor] || "#a685ff", label),
-        opacity: selected ? 1 : 0.42,
+        opacity: selected ? 1 : 0.55,
         zIndexOffset: selected ? 500 : 0
       }).addTo(state.map);
+      var precision = stop.coordQuality === "town"
+        ? '<br><em>Approximate (town centre) - check the address before driving</em>'
+        : '';
       marker.bindPopup("<strong>" + escapeHtml(stop.name) + "</strong><br>" +
         escapeHtml(stop.street + ", " + stop.town) + "<br>" +
         escapeHtml(stop.appliances.join(", ")) + "<br>" +
-        "<strong>" + stop.spaces + " space(s)</strong>");
+        "<strong>" + stop.spaces + " space(s)</strong>" + precision);
       marker.on("click", function () { toggleSelected(stop.id, true); });
       state.markers.set(stop.id, marker);
-      bounds.push([stop.coords.lat, stop.coords.lng]);
+      bounds.push([lat, lng]);
     });
 
     if (state.routeMetrics && state.routeMetrics.geometry) {
@@ -838,7 +863,8 @@
       '<div class="stop-items">' + escapeHtml(stop.appliances.join(", ") || "Item not listed") + '</div>' +
       (stop.notes.length ? '<div class="stop-meta">' + escapeHtml(stop.notes.join(" | ")) + '</div>' : "") +
       '<div class="stop-actions">' +
-      '<button class="mini-btn" type="button" data-action="focus" data-id="' + escapeAttr(stop.id) + '">Map</button>' +
+      '<button class="mini-btn primary" type="button" data-action="navigate" data-id="' + escapeAttr(stop.id) + '">Navigate</button>' +
+      '<button class="mini-btn" type="button" data-action="focus" data-id="' + escapeAttr(stop.id) + '">Show</button>' +
       '<button class="mini-btn" type="button" data-action="select-only" data-id="' + escapeAttr(stop.id) + '">Only this</button>' +
       '<button class="mini-btn danger" type="button" data-action="collect" data-id="' + escapeAttr(stop.id) + '">' +
       (state.pendingCollectIds.has(stop.id) ? "Tap again" : "Collected") + '</button>' +
@@ -861,9 +887,27 @@
     if (!button) return;
     var action = button.dataset.action;
     var id = button.dataset.id;
+    if (action === "navigate") openSingleStopInMaps(id);
     if (action === "focus") focusStop(id);
     if (action === "select-only") selectOnly(id);
     if (action === "collect") markCollected(id);
+  }
+
+  function openSingleStopInMaps(id) {
+    var stop = findStop(id);
+    if (!stop) return;
+    // Prefer precise coords; fall back to the address text so Google can
+    // search for it. Either way, Google Maps opens turn-by-turn navigation.
+    var dest;
+    if (stop.coords && Number.isFinite(stop.coords.lat) && Number.isFinite(stop.coords.lng)) {
+      dest = stop.coords.lat + "," + stop.coords.lng;
+    } else {
+      dest = encodeURIComponent(fullAddress(stop));
+    }
+    var url = "https://www.google.com/maps/dir/?api=1&destination=" + dest +
+              "&travelmode=driving";
+    window.open(url, "_blank", "noopener");
+    toast("Opening " + stop.name + " in Google Maps");
   }
 
   function toggleSelected(id, checked) {

@@ -812,6 +812,12 @@ h2 {
   font-weight: 760;
 }
 
+.mini-btn.primary {
+  background: var(--blue);
+  color: #06111d;
+  border-color: rgba(75, 163, 255, 0.85);
+}
+
 .mini-btn.danger {
   color: #ffb3b3;
   border-color: rgba(239, 91, 91, 0.5);
