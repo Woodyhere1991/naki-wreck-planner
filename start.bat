@@ -24,6 +24,9 @@ if %errorlevel% neq 0 (
     echo.
 )
 
+:: Google Geocoding API key (persisted via setx; this line is a fallback if env not loaded)
+if "%GOOGLE_GEOCODING_KEY%"=="" set "GOOGLE_GEOCODING_KEY=REDACTED_KEY_2"
+
 :: Start browser after 2 seconds
 start "" /b cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:5555"
 
