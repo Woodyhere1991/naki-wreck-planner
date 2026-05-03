@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Naki Wreck Ops">
+  <meta name="apple-mobile-web-app-title" content="Nakiwhiteware Ops">
   <meta name="theme-color" content="#101820">
   <link rel="apple-touch-icon" href="/icon.png">
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png">
@@ -24,14 +24,14 @@
       });
     }
   </script>
-  <title>Naki Wreck Ops HQ</title>
+  <title>Nakiwhiteware Ops</title>
 </head>
 <body>
   <header class="topbar">
     <div class="brand-block">
       <div class="brand-mark">NW</div>
       <div>
-        <h1>Naki Wreck Ops</h1>
+        <h1>Nakiwhiteware Ops</h1>
         <p id="syncLine">Loading pickup sheet...</p>
       </div>
     </div>
@@ -188,8 +188,8 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Customer texts</p>
-              <h2>Copy-ready messages for the selected run</h2>
+              <p class="eyebrow">Group message</p>
+              <h2>One text to send to everyone on today's run</h2>
             </div>
           </div>
           <div class="form-grid">
@@ -203,11 +203,36 @@
             <button data-message-mode="review" type="button">Review</button>
             <button data-message-mode="problem" type="button">Issue</button>
           </div>
+          <pre class="group-message" id="groupMessage"></pre>
           <div class="action-row">
-            <button class="soft-btn" id="copyAllTextsBtn" type="button">Copy all texts</button>
+            <button class="primary-btn" id="copyGroupMessageBtn" type="button">Copy message</button>
             <button class="soft-btn" id="printRunSheetBtn" type="button">Print run sheet</button>
           </div>
-          <div class="text-list" id="textList"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Recipients</p>
+              <h2>Copy + paste into your texts or email</h2>
+            </div>
+          </div>
+          <div class="recipients-block">
+            <div class="recipients-row">
+              <div>
+                <span class="label">Phone numbers <small id="phoneCount">(0)</small></span>
+                <pre class="recipients-pre" id="phoneList"></pre>
+              </div>
+              <button class="soft-btn" id="copyPhonesBtn" type="button">Copy phones</button>
+            </div>
+            <div class="recipients-row">
+              <div>
+                <span class="label">Email addresses <small id="emailCount">(0)</small></span>
+                <pre class="recipients-pre" id="emailList"></pre>
+              </div>
+              <button class="soft-btn" id="copyEmailsBtn" type="button">Copy emails</button>
+            </div>
+          </div>
         </section>
 
         <section class="panel">
@@ -216,6 +241,7 @@
               <p class="eyebrow">Run sheet</p>
               <h2>What to collect, in order</h2>
             </div>
+            <button class="soft-btn" id="copyRunSheetBtn" type="button">Copy run sheet</button>
           </div>
           <pre class="run-sheet" id="runSheet"></pre>
         </section>

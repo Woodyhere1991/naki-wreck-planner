@@ -1,7 +1,7 @@
 @echo off
-title Naki Wreck Ops HQ
+title Nakiwhiteware Ops HQ
 echo ============================================
-echo   Naki Wreck Ops HQ
+echo   Nakiwhiteware Ops HQ
 echo   Starting on http://localhost:5555
 echo ============================================
 echo.

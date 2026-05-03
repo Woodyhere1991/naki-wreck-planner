@@ -1,5 +1,5 @@
 """
-Naki Wreck Ops HQ - Flask backend.
+Nakiwhiteware Ops HQ - Flask backend.
 Reads Google Sheets via CSV export and serves the local operations console.
 """
 import json
@@ -537,5 +537,5 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5555))
-    print(f"Naki Wreck Ops HQ - http://localhost:{port}")
+    print(f"Nakiwhiteware Ops HQ - http://localhost:{port}")
     app.run(host="0.0.0.0", port=port)

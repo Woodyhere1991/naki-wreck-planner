@@ -1,7 +1,7 @@
 {
-  "name": "Naki Wreck Ops",
+  "name": "Nakiwhiteware Ops",
   "short_name": "Naki Ops",
-  "description": "Pickup route planner for Naki Wreck Removal.",
+  "description": "Pickup route planner for Nakiwhiteware Removal.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

@@ -170,7 +170,9 @@
       "csvStopInput", "bulkPasteToggle", "manualStopFocusBtn", "bulkPasteBox",
       "bulkStopsInput", "addBulkStopsBtn", "quickDraftForm", "toast",
       "sendAllSmsBtn", "mobileLoadSummary", "clearRouteQuickBtn", "toolsBtn",
-      "selectVisibleQuickBtn", "fillLoadQuickBtn"
+      "selectVisibleQuickBtn", "fillLoadQuickBtn",
+      "groupMessage", "copyGroupMessageBtn", "phoneList", "phoneCount",
+      "emailList", "emailCount", "copyPhonesBtn", "copyEmailsBtn", "copyRunSheetBtn"
     ].forEach(function (id) {
       el[id] = document.getElementById(id);
     });
@@ -202,8 +204,14 @@
     if (el.toolsBtn) el.toolsBtn.addEventListener("click", function () { setView("admin"); });
     if (el.selectVisibleQuickBtn) el.selectVisibleQuickBtn.addEventListener("click", selectVisibleStops);
     if (el.fillLoadQuickBtn) el.fillLoadQuickBtn.addEventListener("click", selectOneTrailerLoad);
-    el.copyAllTextsBtn.addEventListener("click", copyAllTexts);
+    if (el.copyAllTextsBtn) el.copyAllTextsBtn.addEventListener("click", copyAllTexts);
     if (el.sendAllSmsBtn) el.sendAllSmsBtn.addEventListener("click", sendAllSms);
+    if (el.copyGroupMessageBtn) el.copyGroupMessageBtn.addEventListener("click", copyGroupMessage);
+    if (el.copyPhonesBtn) el.copyPhonesBtn.addEventListener("click", copyPhonesList);
+    if (el.copyEmailsBtn) el.copyEmailsBtn.addEventListener("click", copyEmailsList);
+    if (el.copyRunSheetBtn) el.copyRunSheetBtn.addEventListener("click", function () {
+      copyToClipboard(el.runSheet ? el.runSheet.textContent : "");
+    });
     el.printRunSheetBtn.addEventListener("click", function () {
       setView("texts");
       setTimeout(function () { window.print(); }, 100);
@@ -268,12 +276,14 @@
       if (!button) return;
       selectCorridor(button.dataset.selectCorridor);
     });
-    el.textList.addEventListener("click", function (event) {
-      var button = event.target.closest("[data-copy-message]");
-      if (!button) return;
-      var card = button.closest(".text-card");
-      copyToClipboard(card.querySelector("p").textContent);
-    });
+    if (el.textList) {
+      el.textList.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-copy-message]");
+        if (!button) return;
+        var card = button.closest(".text-card");
+        copyToClipboard(card.querySelector("p").textContent);
+      });
+    }
     el.draftForm.addEventListener("submit", function (event) {
       addDraftStop(event, el.draftForm, false);
     });
@@ -385,7 +395,7 @@
     var consent = localStorage.getItem("nakiAutoGeocodeConsent");
     if (consent !== "yes") {
       var ok = window.confirm(
-        "Naki Wreck Ops can auto-find precise map pins for new addresses every " +
+        "Nakiwhiteware Ops can auto-find precise map pins for new addresses every " +
         "time you tap Refresh. It sends each unknown address to OpenStreetMap " +
         "(free, no account needed). The address is sent without the customer's " +
         "name or phone. Allow this from now on?"
@@ -818,18 +828,96 @@
   function renderTexts() {
     var stops = orderedSelectedStops();
     var day = el.pickupDayInput.value.trim() || "Thursday";
-    var messages = stops.map(function (stop) {
-      return { stop: stop, text: buildMessage(stop, state.messageMode, day) };
-    });
 
-    el.textList.innerHTML = messages.length ? messages.map(function (item) {
-      return '<article class="text-card"><div class="stop-top"><div><div class="stop-name">' +
-        escapeHtml(item.stop.name) + '</div><div class="stop-meta">' + escapeHtml(item.stop.phone || "No phone") +
-        '</div></div><button class="mini-btn" data-copy-message="' + escapeAttr(item.stop.id) +
-        '" type="button">Copy</button></div><p>' + escapeHtml(item.text) + '</p></article>';
-    }).join("") : '<p class="hint">Select stops first, then your messages will appear here.</p>';
+    if (el.groupMessage) {
+      el.groupMessage.textContent = stops.length
+        ? buildGroupMessage(state.messageMode, day)
+        : "Pick stops first, then your group message appears here.";
+    }
 
-    el.runSheet.textContent = buildRunSheet(stops);
+    if (el.phoneList) {
+      var phones = stops.map(function (s) { return cleanPhone(s.phone); }).filter(Boolean);
+      // de-dupe
+      var phonesUniq = Array.from(new Set(phones));
+      el.phoneList.textContent = phonesUniq.length ? phonesUniq.join(", ") : "(no phone numbers in selected stops)";
+      if (el.phoneCount) el.phoneCount.textContent = "(" + phonesUniq.length + ")";
+    }
+    if (el.emailList) {
+      var emails = stops.map(function (s) { return (s.email || "").trim(); }).filter(Boolean);
+      var emailsUniq = Array.from(new Set(emails.map(function (e) { return e.toLowerCase(); })));
+      el.emailList.textContent = emailsUniq.length ? emailsUniq.join(", ") : "(no email addresses in selected stops)";
+      if (el.emailCount) el.emailCount.textContent = "(" + emailsUniq.length + ")";
+    }
+
+    if (el.runSheet) el.runSheet.textContent = buildRunSheet(stops);
+
+    // Old per-customer text-card list (still rendered if old DOM is around)
+    if (el.textList) {
+      var messages = stops.map(function (stop) {
+        return { stop: stop, text: buildMessage(stop, state.messageMode, day) };
+      });
+      el.textList.innerHTML = messages.length ? messages.map(function (item) {
+        return '<article class="text-card"><div class="stop-top"><div><div class="stop-name">' +
+          escapeHtml(item.stop.name) + '</div><div class="stop-meta">' + escapeHtml(item.stop.phone || "No phone") +
+          '</div></div><button class="mini-btn" data-copy-message="' + escapeAttr(item.stop.id) +
+          '" type="button">Copy</button></div><p>' + escapeHtml(item.text) + '</p></article>';
+      }).join("") : "";
+    }
+  }
+
+  function buildGroupMessage(mode, day) {
+    var window_ = el.pickupWindowInput.value.trim() || "during the day";
+    var note = el.driverNoteInput.value.trim();
+    if (mode === "onway") {
+      return "Hi all - heading out now for today's whiteware pickups around Taranaki. " +
+        "Please leave your items somewhere easy to access. I will text on arrival if needed. " +
+        "Cheers, Woody - Nakiwhiteware Removal";
+    }
+    if (mode === "review") {
+      return "Hi - thanks for booking Nakiwhiteware Removal recently. If you have a minute, " +
+        "a quick Google review would really help the business: " +
+        "https://search.google.com/local/writereview?placeid=YOUR_PLACE_ID " +
+        "Cheers, Woody";
+    }
+    if (mode === "problem") {
+      return "Hi - just sorting out the pickup run and need to check a couple of details for some stops. " +
+        "If you booked a pickup recently, please reply to this when you can. " +
+        "Cheers, Woody - Nakiwhiteware Removal";
+    }
+    // default reminder
+    return "Hi all - just confirming Nakiwhiteware Removal is doing your whiteware pickup " +
+      day + " " + window_ + ". Please leave your items somewhere easy to access. " +
+      (note ? note + ". " : "") +
+      "Cheers, Woody";
+  }
+
+  function copyGroupMessage() {
+    if (!el.groupMessage) return;
+    copyToClipboard(el.groupMessage.textContent);
+  }
+
+  function copyPhonesList() {
+    if (!el.phoneList) return;
+    var text = el.phoneList.textContent;
+    if (text.startsWith("(")) { toast("Nothing to copy"); return; }
+    copyToClipboard(text);
+  }
+
+  function copyEmailsList() {
+    if (!el.emailList) return;
+    var text = el.emailList.textContent;
+    if (text.startsWith("(")) { toast("Nothing to copy"); return; }
+    copyToClipboard(text);
+  }
+
+  function cleanPhone(p) {
+    if (!p) return "";
+    var digits = String(p).replace(/[^\d+]/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("0")) return digits;
+    if (digits.startsWith("64") && !digits.startsWith("+64")) return "+" + digits;
+    if (!digits.startsWith("+")) return "+64" + digits;
+    return digits;
   }
 
   function renderCleanup() {
@@ -1667,17 +1755,17 @@
     var note = el.driverNoteInput.value.trim();
     if (mode === "onway") {
       return "Hey " + first + ", I am heading your way now for the " + items +
-        " pickup. I should be there soon. Cheers, Woody - Naki Wreck Removal";
+        " pickup. I should be there soon. Cheers, Woody - Nakiwhiteware Removal";
     }
     if (mode === "review") {
-      return "Hey " + first + ", thanks for booking Naki Wreck Removal for the " + items +
+      return "Hey " + first + ", thanks for booking Nakiwhiteware Removal for the " + items +
         " pickup. If you have a minute, a quick Google review would really help the business. Cheers, Woody";
     }
     if (mode === "problem") {
       return "Hey " + first + ", I am sorting today's pickup run and need to check something for " +
-        stop.street + ". Can you please reply when you get a chance? Cheers, Woody - Naki Wreck Removal";
+        stop.street + ". Can you please reply when you get a chance? Cheers, Woody - Nakiwhiteware Removal";
     }
-    return "Hey " + first + ", just confirming your Naki Wreck pickup for " + day + " " +
+    return "Hey " + first + ", just confirming your Nakiwhiteware Removal pickup for " + day + " " +
       windowText + " for " + items + ". Please leave it somewhere easy to access. " +
       note + ". Cheers, Woody";
   }
@@ -1686,7 +1774,7 @@
     if (!stops.length) return "No selected stops yet.";
     var lines = [];
     var day = el.pickupDayInput.value.trim() || "Pickup day";
-    lines.push("NAKI WRECK RUN SHEET - " + day.toUpperCase());
+    lines.push("NAKIWHITEWARE RUN SHEET - " + day.toUpperCase());
     lines.push("Start: " + START.label);
     lines.push("Drop-off: " + DROPOFF.label);
     lines.push("Stops: " + stops.length + " | Spaces: " + sumSpaces(stops) + " | " + loadStatus(sumSpaces(stops)).shortLabel);
