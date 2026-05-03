@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Naki Wreck">
+<meta name="theme-color" content="#0d2b0d">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
+<title>Naki Wreck Route Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header — minimal */
+header {
+  background: #0d2b0d;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #2ecc40;
+  flex-shrink: 0;
+  z-index: 1000;
+}
+header h1 {
+  font-size: 16px;
+  color: #2ecc40;
+  font-weight: 700;
+}
+header .subtitle { display: none; }
+
+/* Action buttons — wrap on mobile */
+.header-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.header-actions button {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 44px;
+  min-width: 44px;
+}
+.header-actions button:active {
+  transform: scale(0.95);
+}
+.btn-refresh { background: #2ecc40; color: #0d2b0d; }
+.btn-optimize { background: #e67e22; color: #fff; }
+.btn-gmaps { background: #3498db; color: #fff; }
+.btn-texts { background: #e74c3c; color: #fff; }
+
+/* Quick stats banner */
+.stats-banner {
+  display: flex;
+  background: #0f1a2e;
+  border-bottom: 1px solid #2a3a5c;
+  flex-shrink: 0;
+  overflow-x: auto;
+  gap: 0;
+}
+.stat-item {
+  flex: 1;
+  padding: 8px 12px;
+  text-align: center;
+  border-right: 1px solid #2a3a5c;
+  min-width: 80px;
+}
+.stat-item:last-child { border-right: none; }
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #2ecc40;
+  line-height: 1.2;
+}
+.stat-label {
+  font-size: 10px;
+  color: #8fbc8f;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Route summary card */
+.route-info {
+  display: none;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #0f3d0f 0%, #1a4a2a 100%);
+  border-bottom: 2px solid #2ecc40;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.route-info.show { display: block; }
+.route-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 8px;
+}
+.route-stat {
+  text-align: center;
+  flex: 1;
+}
+.route-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #2ecc40;
+}
+.route-stat-label {
+  font-size: 10px;
+  color: #8fbc8f;
+  text-transform: uppercase;
+}
+.route-stat-divider {
+  width: 1px;
+  height: 32px;
+  background: #2ecc40;
+  opacity: 0.3;
+}
+
+/* MOBILE FIRST — map on top, panels below */
+.main-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Map takes most of the screen on mobile */
+#map {
+  flex: 1;
+  min-height: 50vh;
+}
+
+/* Sidebar scrolls below map on mobile */
+.sidebar {
+  width: 100%;
+  max-height: 45vh;
+  background: #16213e;
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid #2ecc40;
+  overflow-y: auto;
+}
+
+/* DESKTOP — side by side */
+@media (min-width: 900px) {
+  .main-container {
+    flex-direction: row;
+  }
+  #map {
+    min-height: auto;
+    flex: 1;
+  }
+  .sidebar {
+    width: 30%;
+    min-width: 320px;
+    max-width: 400px;
+    max-height: none;
+    border-top: none;
+    border-left: 2px solid #2ecc40;
+    overflow: hidden;
+  }
+}
+
+/* Load calculator — compact */
+.load-calc {
+  background: #1a1a2e;
+  padding: 8px 12px;
+  border-bottom: 1px solid #2a3a5c;
+  flex-shrink: 0;
+}
+.load-calc h3 {
+  font-size: 12px;
+  color: #2ecc40;
+  margin-bottom: 4px;
+}
+.load-bar-container {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.load-bar-wrap {
+  flex: 1;
+}
+.load-bar-label {
+  font-size: 12px;
+  color: #8fbc8f;
+  margin-bottom: 3px;
+  display: flex;
+  justify-content: space-between;
+}
+.load-bar {
+  height: 18px;
+  background: #2a3a5c;
+  border-radius: 9px;
+  overflow: hidden;
+  position: relative;
+}
+.load-bar-fill {
+  height: 100%;
+  border-radius: 9px;
+  transition: width 0.4s ease, background 0.3s;
+  background: #2ecc40;
+}
+.load-bar-fill.warn { background: #e67e22; }
+.load-bar-fill.over { background: #e74c3c; }
+.load-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2ecc40;
+  min-width: 80px;
+  text-align: center;
+}
+.load-total.warn { color: #e67e22; }
+.load-total.over { color: #e74c3c; }
+.load-warning {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  display: none;
+  text-align: center;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+.load-warning.show { display: block; }
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Corridor filter tabs */
+.corridor-tabs {
+  display: flex;
+  padding: 8px 12px;
+  gap: 6px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a3a5c;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.corridor-tab {
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.corridor-tab:active {
+  transform: scale(0.95);
+}
+.corridor-tab.all { background: #2a3a5c; color: #e0e0e0; }
+.corridor-tab.all.active { border-color: #e0e0e0; background: #3a4a6c; box-shadow: 0 0 8px rgba(224,224,224,0.4); }
+.corridor-tab.north { background: #1a4a8a; color: #5dade2; }
+.corridor-tab.north.active { border-color: #5dade2; background: #2a5a9a; box-shadow: 0 0 8px rgba(93,173,226,0.4); }
+.corridor-tab.south { background: #1a6a2a; color: #58d68d; }
+.corridor-tab.south.active { border-color: #58d68d; background: #2a7a3a; box-shadow: 0 0 8px rgba(88,214,141,0.4); }
+.corridor-tab.coastal { background: #7a4a0a; color: #f0a030; }
+.corridor-tab.coastal.active { border-color: #f0a030; background: #8a5a1a; box-shadow: 0 0 8px rgba(240,160,48,0.4); }
+.corridor-tab.unknown { background: #4a2a4a; color: #c39bd3; }
+.corridor-tab.unknown.active { border-color: #c39bd3; background: #5a3a5a; box-shadow: 0 0 8px rgba(195,155,211,0.4); }
+
+/* Pickup list */
+.pickup-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.pickup-list::-webkit-scrollbar { width: 8px; }
+.pickup-list::-webkit-scrollbar-track { background: #16213e; }
+.pickup-list::-webkit-scrollbar-thumb { background: #2a3a5c; border-radius: 4px; }
+
+.corridor-group {
+  margin-bottom: 12px;
+}
+.corridor-header {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.corridor-header.north { background: #1a4a8a; color: #5dade2; }
+.corridor-header.south { background: #1a6a2a; color: #58d68d; }
+.corridor-header.coastal { background: #7a4a0a; color: #f0a030; }
+.corridor-header.unknown { background: #4a2a4a; color: #c39bd3; }
+
+.pickup-card {
+  background: #1e2d50;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-left: 4px solid #2a3a5c;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.pickup-card:hover { background: #253660; }
+.pickup-card:active { transform: scale(0.98); }
+.pickup-card.selected {
+  border-left-color: #2ecc40;
+  background: #1a3a2a;
+  box-shadow: 0 0 0 1px rgba(46, 204, 64, 0.2);
+}
+.pickup-card.north { border-left-color: #3498db; }
+.pickup-card.south { border-left-color: #2ecc71; }
+.pickup-card.coastal { border-left-color: #e67e22; }
+.pickup-card.unknown { border-left-color: #9b59b6; }
+.pickup-card.selected.north { border-left-color: #3498db; background: #1a2d4a; box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.2); }
+.pickup-card.selected.south { border-left-color: #2ecc71; background: #1a3a2a; box-shadow: 0 0 0 1px rgba(46, 204, 113, 0.2); }
+.pickup-card.selected.coastal { border-left-color: #e67e22; background: #2a2a1a; box-shadow: 0 0 0 1px rgba(230, 126, 34, 0.2); }
+.pickup-card.selected.unknown { border-left-color: #9b59b6; background: #2a1a2a; box-shadow: 0 0 0 1px rgba(155, 89, 182, 0.2); }
+
+.pickup-card .top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.pickup-card .name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #ecf0f1;
+}
+.pickup-card .spaces {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #2a3a5c;
+  color: #2ecc40;
+  white-space: nowrap;
+}
+.pickup-card .address {
+  font-size: 12px;
+  color: #8fbc8f;
+  margin-bottom: 4px;
+}
+.pickup-card .phone-row {
+  font-size: 12px;
+  color: #7f8c8d;
+  margin-bottom: 4px;
+}
+.pickup-card .phone-row a {
+  color: #5dade2;
+  text-decoration: none;
+}
+.pickup-card .items {
+  font-size: 11px;
+  color: #bdc3c7;
+  line-height: 1.4;
+}
+.pickup-card .additional {
+  font-size: 11px;
+  color: #e67e22;
+  margin-top: 3px;
+  font-style: italic;
+}
+.pickup-card .date-tag {
+  font-size: 10px;
+  color: #7f8c8d;
+  margin-top: 4px;
+}
+
+.pickup-card .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #2a3a5c;
+}
+.pickup-card .check-row label {
+  font-size: 12px;
+  color: #8fbc8f;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pickup-card .check-row input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: #2ecc40;
+  cursor: pointer;
+}
+
+/* Collected button with swipe confirmation */
+.btn-collected {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.btn-collected:active { transform: scale(0.95); }
+.btn-collected.confirming {
+  background: #c0392b;
+  animation: shake-btn 0.3s ease;
+}
+.btn-collected.done {
+  background: #27ae60;
+  pointer-events: none;
+}
+@keyframes shake-btn {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.route-order {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  border-radius: 50%;
+  background: #2ecc40;
+  color: #0d2b0d;
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* Map */
+.map-container {
+  flex: 1;
+  position: relative;
+}
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Floating Google Maps button on map */
+.fab-gmaps {
+  position: absolute;
+  bottom: 24px;
+  right: 16px;
+  z-index: 999;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #3498db;
+  color: #fff;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  transition: all 0.3s;
+}
+.fab-gmaps:active {
+  transform: scale(0.9);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.fab-gmaps:hover {
+  background: #2980b9;
+  transform: scale(1.05);
+}
+.fab-gmaps svg {
+  width: 28px;
+  height: 28px;
+  fill: #fff;
+}
+
+/* Floating refresh button on map */
+.fab-refresh {
+  position: absolute;
+  bottom: 24px;
+  left: 16px;
+  z-index: 999;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #2ecc40;
+  color: #0d2b0d;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  transition: all 0.3s;
+}
+.fab-refresh:active { transform: scale(0.9); }
+.fab-refresh.spinning svg {
+  animation: spin 0.8s linear infinite;
+}
+.fab-refresh svg {
+  width: 22px;
+  height: 22px;
+  fill: #0d2b0d;
+}
+
+/* Google Maps modal */
+.gmaps-modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+}
+.gmaps-modal.show { display: flex; }
+.gmaps-content {
+  background: #16213e;
+  border: 2px solid #2ecc40;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.gmaps-content h2 {
+  color: #2ecc40;
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+.gmaps-link {
+  display: block;
+  padding: 14px 16px;
+  background: #3498db;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-align: center;
+  transition: background 0.2s;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gmaps-link:hover { background: #2980b9; }
+.gmaps-close {
+  margin-top: 16px;
+  padding: 12px 24px;
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  min-height: 48px;
+}
+
+/* Loading overlay */
+.loading {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 3000;
+  justify-content: center;
+  align-items: center;
+}
+.loading.show { display: flex; }
+.loading-box {
+  background: #16213e;
+  border: 2px solid #2ecc40;
+  border-radius: 12px;
+  padding: 32px 48px;
+  text-align: center;
+}
+.loading-box .spinner {
+  width: 40px; height: 40px;
+  border: 4px solid #2a3a5c;
+  border-top-color: #2ecc40;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-box p { color: #8fbc8f; font-size: 14px; }
+
+/* Status bar */
+.status-bar {
+  background: #0d2b0d;
+  padding: 4px 16px;
+  font-size: 11px;
+  color: #8fbc8f;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Drag handle — always visible on mobile */
+.drag-handle {
+  display: none;
+  width: 100%;
+  height: 28px;
+  background: #0f3d0f;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1001;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.drag-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 4px;
+  background: #2ecc40;
+  border-radius: 2px;
+}
+.drag-handle:active { background: #1a5a1a; }
+
+/* Mobile view toggle — hidden now, replaced by drag handle */
+.view-toggle { display: none; }
+
+/* Mobile — split screen with drag handle */
+@media (max-width: 900px) {
+  .main-container {
+    flex-direction: column;
+  }
+  .drag-handle { display: block; }
+  .map-container {
+    flex: 6;
+    min-height: 120px;
+    overflow: hidden;
+    order: 1;
+  }
+  #map {
+    width: 100%;
+    height: 100%;
+    min-height: auto;
+  }
+  .drag-handle {
+    order: 2;
+  }
+  .sidebar {
+    flex: 4;
+    width: 100%;
+    min-width: unset;
+    max-height: none;
+    border-right: none;
+    border-top: none;
+    overflow-y: auto;
+    min-height: 80px;
+    order: 3;
+  }
+  header h1 { font-size: 14px; max-width: 100px; line-height: 1.2; }
+  .header-actions { flex-wrap: nowrap; gap: 3px; }
+  .header-actions button { padding: 6px 8px; font-size: 10px; min-height: 36px; min-width: 36px; }
+}
+
+/* Comms panel */
+.comms-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 9999;
+  overflow-y: auto;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+.comms-panel {
+  max-width: 600px;
+  margin: 0 auto;
+  background: #16213e;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #2a3a5c;
+}
+.comms-msg {
+  background: #1a1a2e;
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+.comms-msg:active {
+  background: #253660;
+}
+.comms-msg .copied-flash {
+  color: #2ecc40;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+  display: none;
+}
+.comms-msg.copied .copied-flash {
+  display: block;
+  animation: fadeIn 0.2s ease;
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #2ecc40;
+  color: #0d2b0d;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 13px;
+  z-index: 10000;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Dark Leaflet overrides */
+.leaflet-popup-content-wrapper {
+  background: #16213e;
+  color: #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.leaflet-popup-tip { background: #16213e; }
+.leaflet-popup-content a { color: #5dade2; }
+.leaflet-control-attribution { background: rgba(22,33,62,0.8) !important; color: #8fbc8f !important; }
+.leaflet-control-attribution a { color: #5dade2 !important; }
+.leaflet-control-zoom a {
+  background: #16213e !important;
+  color: #2ecc40 !important;
+  border-color: #2a3a5c !important;
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  font-size: 20px !important;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center;">
+    <h1>Naki Wreck Route Planner</h1>
+    <span class="subtitle">Whiteware Removal</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn-refresh" onclick="loadPickups()" title="Re-read latest data from your Google Sheet">Refresh</button>
+    <button class="btn-optimize" onclick="optimizeRoute()" title="Reorder your selected stops for the shortest drive">Optimize</button>
+    <button class="btn-gmaps" onclick="openGoogleMaps()" title="Open optimized route in Google Maps">G-Maps</button>
+    <button class="btn-texts" onclick="showCommsPanel()" title="Generate customer texts">Texts</button>
+  </div>
+</header>
+
+<!-- Quick stats banner -->
+<div class="stats-banner" id="statsBanner">
+  <div class="stat-item">
+    <div class="stat-value" id="statPickups">0</div>
+    <div class="stat-label">Pickups</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value" id="statSpaces">0</div>
+    <div class="stat-label">Spaces</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value" id="statSelected">0</div>
+    <div class="stat-label">Selected</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value" id="statCollected">0</div>
+    <div class="stat-label">Collected</div>
+  </div>
+</div>
+
+<!-- view toggle removed — replaced by drag handle split screen -->
+
+<div class="route-info" id="routeInfo">
+  <div class="route-card">
+    <div class="route-stat">
+      <div class="route-stat-value" id="routeStops">0</div>
+      <div class="route-stat-label">Stops</div>
+    </div>
+    <div class="route-stat-divider"></div>
+    <div class="route-stat">
+      <div class="route-stat-value" id="routeDist">0</div>
+      <div class="route-stat-label">KM</div>
+    </div>
+    <div class="route-stat-divider"></div>
+    <div class="route-stat">
+      <div class="route-stat-value" id="routeTime">0</div>
+      <div class="route-stat-label">Minutes</div>
+    </div>
+  </div>
+</div>
+
+<div class="main-container" id="mainContainer">
+  <div class="map-container">
+    <div id="map"></div>
+    <!-- FAB: Open in Google Maps -->
+    <button class="fab-gmaps" onclick="openGoogleMaps()" title="Open in Google Maps">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+    </button>
+    <!-- FAB: Refresh -->
+    <button class="fab-refresh" id="fabRefresh" onclick="loadPickups()" title="Refresh data">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+    </button>
+  </div>
+
+  <div class="drag-handle" id="dragHandle"></div>
+
+  <div class="sidebar" id="sidebar">
+    <div class="load-calc">
+      <h3>Load Calculator</h3>
+      <div class="load-bar-container">
+        <div class="load-bar-wrap">
+          <div class="load-bar-label">
+            <span>Trailer (18 spaces)</span>
+            <span id="trailerCount">0 / 18</span>
+          </div>
+          <div class="load-bar">
+            <div class="load-bar-fill" id="trailerBar" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="load-total" id="totalSpaces">0</div>
+      </div>
+      <div class="load-bar-container" style="margin-top:6px;">
+        <div class="load-bar-wrap">
+          <div class="load-bar-label">
+            <span>Ute (8 spaces)</span>
+            <span id="uteCount">0 / 8</span>
+          </div>
+          <div class="load-bar">
+            <div class="load-bar-fill" id="uteBar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="load-warning" id="loadWarning">OVER CAPACITY! Consider splitting into two runs.</div>
+    </div>
+
+    <div class="corridor-tabs">
+      <div class="corridor-tab all active" onclick="filterCorridor('all')">All</div>
+      <div class="corridor-tab north" onclick="filterCorridor('north')">North</div>
+      <div class="corridor-tab south" onclick="filterCorridor('south')">South</div>
+      <div class="corridor-tab coastal" onclick="filterCorridor('coastal')">Coastal</div>
+      <div class="corridor-tab unknown" onclick="filterCorridor('unknown')">Unknown</div>
+    </div>
+
+    <div class="pickup-list" id="pickupList">
+      <p style="text-align:center;padding:40px;color:#8fbc8f;">Loading pickups...</p>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span id="statusText">Ready</span>
+  <span id="statusCount">0 pickups loaded</span>
+</div>
+
+<!-- Google Maps modal -->
+<div class="gmaps-modal" id="gmapsModal">
+  <div class="gmaps-content">
+    <h2>Google Maps Navigation</h2>
+    <div id="gmapsLinks"></div>
+    <button class="gmaps-close" onclick="closeGmapsModal()">Close</button>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingText">Loading...</p>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const START_POINT = { lat: -39.1567, lng: 174.2064, label: "10 Tawa St, Inglewood" };
+const END_POINT   = { lat: -39.0360, lng: 174.1017, label: "Global Metal Solutions, Bell Block" };
+const TRAILER_CAP = 18;
+const UTE_CAP = 8;
+
+// Town -> corridor mapping
+const CORRIDOR_MAP = {
+  'new plymouth': 'north', 'bell block': 'north', 'oakura': 'north',
+  'waitara': 'north', 'inglewood': 'north', 'fitzroy': 'north',
+  'merrilands': 'north', 'westown': 'north', 'moturoa': 'north',
+  'strandon': 'north', 'vogeltown': 'north', 'spotswood': 'north',
+  'brooklands': 'north',
+  'patea': 'south', 'waverley': 'south', 'hawera': 'south',
+  'eltham': 'south', 'stratford': 'south', 'normanby': 'south',
+  'manaia': 'south', 'kaponga': 'south', 'awatuna': 'south',
+  'opunake': 'coastal', 'rahotu': 'coastal', 'oaonui': 'coastal',
+  'okato': 'coastal'
+};
+
+const CORRIDOR_COLORS = {
+  north: '#3498db',
+  south: '#2ecc71',
+  coastal: '#e67e22',
+  unknown: '#9b59b6'
+};
+
+// Fallback coordinates for tricky towns
+const FALLBACK_COORDS = {
+  'waitara':       { lat: -38.9976, lng: 174.2348 },
+  'hawera':        { lat: -39.5908, lng: 174.2810 },
+  'patea':         { lat: -39.7467, lng: 174.4861 },
+  'opunake':       { lat: -39.4560, lng: 174.0158 },
+  'rahotu':        { lat: -39.3300, lng: 173.8939 },
+  'oaonui':        { lat: -39.3914, lng: 174.0545 },
+  'oakura':        { lat: -39.1060, lng: 174.0234 },
+  'eltham':        { lat: -39.4290, lng: 174.3017 },
+  'stratford':     { lat: -39.3333, lng: 174.2837 },
+  'inglewood':     { lat: -39.1567, lng: 174.2064 },
+  'bell block':    { lat: -39.0360, lng: 174.1017 },
+  'new plymouth':  { lat: -39.0556, lng: 174.0752 },
+  'fitzroy':       { lat: -39.0500, lng: 174.1100 },
+  'merrilands':    { lat: -39.0650, lng: 174.0650 },
+  'westown':       { lat: -39.0680, lng: 174.0540 },
+  'moturoa':       { lat: -39.0720, lng: 174.0480 },
+  'strandon':      { lat: -39.0530, lng: 174.1000 },
+  'vogeltown':     { lat: -39.0750, lng: 174.0620 },
+  'spotswood':     { lat: -39.0780, lng: 174.0380 },
+  'brooklands':    { lat: -39.0200, lng: 174.0850 },
+  'normanby':      { lat: -39.5100, lng: 174.2350 },
+  'manaia':        { lat: -39.5450, lng: 174.1240 },
+  'kaponga':       { lat: -39.4200, lng: 174.1600 },
+  'waverley':      { lat: -39.7650, lng: 174.6310 },
+  'awatuna':       { lat: -39.3900, lng: 174.1200 },
+  'okato':         { lat: -39.1930, lng: 173.8820 }
+};
+
+// Large items that take 2 spaces
+const LARGE_ITEMS = [
+  'chest freezer', 'double door fridge', 'french door',
+  'double door', 'side by side', 'american fridge'
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let allStops = [];       // Merged/processed stops
+let geocodeCache = {};   // address -> {lat, lng}
+let markers = {};        // stopId -> marker
+let routeLayer = null;
+let optimizedOrder = null;
+let currentFilter = 'all';
+let map;
+let collectingTimers = {}; // track double-tap confirmations
+
+// ============================================================
+// TOAST NOTIFICATIONS
+// ============================================================
+function showToast(message, duration) {
+  duration = duration || 2000;
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(function() { toast.classList.remove('show'); }, duration);
+}
+
+// ============================================================
+// MAP INIT
+// ============================================================
+function initMap() {
+  map = L.map('map').setView([-39.15, 174.15], 10);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+    subdomains: 'abcd'
+  }).addTo(map);
+
+  // Start marker
+  L.marker([START_POINT.lat, START_POINT.lng], {
+    icon: makeIcon('#e74c3c', 'S'),
+    zIndexOffset: 1000
+  }).addTo(map).bindPopup('<b>START:</b> ' + START_POINT.label);
+
+  // End marker
+  L.marker([END_POINT.lat, END_POINT.lng], {
+    icon: makeIcon('#e74c3c', 'E'),
+    zIndexOffset: 1000
+  }).addTo(map).bindPopup('<b>END:</b> ' + END_POINT.label);
+}
+
+function makeIcon(color, text) {
+  var size = text.length > 2 ? 34 : 30;
+  var fontSize = text.length > 2 ? 10 : 13;
+  return L.divIcon({
+    className: 'custom-marker',
+    html: '<div style="' +
+      'background:' + color + ';' +
+      'color:#fff;' +
+      'width:' + size + 'px;height:' + size + 'px;' +
+      'border-radius:50%;' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'font-weight:700;font-size:' + fontSize + 'px;' +
+      'border:2px solid #fff;' +
+      'box-shadow:0 2px 8px rgba(0,0,0,0.5);' +
+    '">' + text + '</div>',
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2],
+    popupAnchor: [0, -size/2]
+  });
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadPickups() {
+  showLoading('Loading pickup data...');
+  setStatus('Fetching data from Google Sheets...');
+
+  // Spin the FAB refresh button
+  var fabRefresh = document.getElementById('fabRefresh');
+  if (fabRefresh) fabRefresh.classList.add('spinning');
+
+  try {
+    // Load geocache first
+    var cacheResp = await fetch('/api/geocache');
+    if (cacheResp.ok) {
+      geocodeCache = await cacheResp.json();
+    }
+
+    var resp = await fetch('/api/pickups');
+    var data = await resp.json();
+
+    if (data.error) {
+      setStatus('Error: ' + data.error);
+      hideLoading();
+      document.getElementById('pickupList').innerHTML =
+        '<p style="text-align:center;padding:40px;color:#e74c3c;">Error loading data:<br>' + data.error + '</p>';
+      if (fabRefresh) fabRefresh.classList.remove('spinning');
+      return;
+    }
+
+    var raw = data.pickups || [];
+    setStatus('Got ' + raw.length + ' rows, processing...');
+
+    // Merge same person + same address
+    allStops = mergePickups(raw);
+    setStatus(allStops.length + ' stops after merging');
+
+    // Geocode all
+    await geocodeAll();
+
+    // Render
+    renderSidebar();
+    renderMarkers();
+    updateLoad();
+    updateStats();
+    setStatusCount(allStops.length + ' pickups loaded');
+    setStatus('Ready');
+    showToast('Data refreshed');
+  } catch (err) {
+    setStatus('Error: ' + err.message);
+    document.getElementById('pickupList').innerHTML =
+      '<p style="text-align:center;padding:40px;color:#e74c3c;">Failed to load:<br>' + err.message + '</p>';
+  }
+  hideLoading();
+  if (fabRefresh) fabRefresh.classList.remove('spinning');
+}
+
+function mergePickups(raw) {
+  // Group by (first+last+street+town) to merge same person same address
+  var groups = {};
+  for (var p of raw) {
+    var key = [
+      (p.first_name || '').trim().toLowerCase(),
+      (p.last_name || '').trim().toLowerCase(),
+      (p.street || '').trim().toLowerCase(),
+      (p.town || '').trim().toLowerCase()
+    ].join('|');
+
+    if (!groups[key]) {
+      groups[key] = {
+        first_name: p.first_name || '',
+        last_name: p.last_name || '',
+        phone: p.phone || '',
+        email: p.email || '',
+        street: p.street || '',
+        town: p.town || '',
+        area: p.area || '',
+        rural: p.rural || '',
+        appliances: [...(p.appliances || [])],
+        additional_info: p.additional_info || '',
+        dates: [p.date || ''],
+        total: p.total || '',
+        submission_ids: [p.submission_id || ''],
+        _sheetLat: p.lat || null,
+        _sheetLng: p.lng || null
+      };
+    } else {
+      // Merge appliances
+      groups[key].appliances.push(...(p.appliances || []));
+      groups[key].dates.push(p.date || '');
+      groups[key].submission_ids.push(p.submission_id || '');
+      if (p.additional_info) {
+        groups[key].additional_info += '; ' + p.additional_info;
+      }
+    }
+  }
+
+  // Convert to array with IDs
+  return Object.values(groups).map(function(g, idx) {
+    var town = (g.town || '').trim().toLowerCase();
+    var area = (g.area || '').trim().toLowerCase();
+    var corridor = CORRIDOR_MAP[town] || CORRIDOR_MAP[area] || 'unknown';
+
+    // Try partial match on town
+    if (corridor === 'unknown') {
+      for (var [k, v] of Object.entries(CORRIDOR_MAP)) {
+        if (town.includes(k) || k.includes(town)) {
+          corridor = v;
+          break;
+        }
+      }
+    }
+
+    return {
+      id: 'stop-' + idx,
+      ...g,
+      corridor: corridor,
+      spaces: calcSpaces(g.appliances),
+      selected: true,
+      coords: null,
+      routeOrder: null
+    };
+  });
+}
+
+function calcSpaces(appliances) {
+  var total = 0;
+  for (var item of appliances) {
+    var lower = item.toLowerCase();
+    var isLarge = LARGE_ITEMS.some(function(lg) { return lower.includes(lg); });
+    total += isLarge ? 2 : 1;
+  }
+  return total;
+}
+
+// ============================================================
+// GEOCODING
+// ============================================================
+async function geocodeAll() {
+  showLoading('Geocoding addresses...');
+  var newCacheEntries = {};
+  var count = 0;
+
+  for (var stop of allStops) {
+    var fullAddr = buildAddress(stop);
+    var cacheKey = fullAddr.toLowerCase().trim();
+    count++;
+    document.getElementById('loadingText').textContent =
+      'Geocoding ' + count + '/' + allStops.length + ': ' + stop.town + '...';
+
+    // Use pre-cached coords from sheet (fastest)
+    if (stop._sheetLat && stop._sheetLng) {
+      stop.coords = { lat: stop._sheetLat, lng: stop._sheetLng };
+      continue;
+    }
+
+    // Check local geocache
+    if (geocodeCache[cacheKey]) {
+      stop.coords = geocodeCache[cacheKey];
+      continue;
+    }
+
+    // Try fallback for town
+    var townKey = (stop.town || '').trim().toLowerCase();
+    if (FALLBACK_COORDS[townKey] && (!stop.street || stop.street.trim() === '')) {
+      stop.coords = FALLBACK_COORDS[townKey];
+      geocodeCache[cacheKey] = stop.coords;
+      newCacheEntries[cacheKey] = stop.coords;
+      continue;
+    }
+
+    // Try Nominatim
+    try {
+      var coords = await nominatimGeocode(fullAddr);
+      if (coords) {
+        stop.coords = coords;
+        geocodeCache[cacheKey] = coords;
+        newCacheEntries[cacheKey] = coords;
+      } else {
+        // Fallback to town center
+        if (FALLBACK_COORDS[townKey]) {
+          stop.coords = FALLBACK_COORDS[townKey];
+          geocodeCache[cacheKey] = stop.coords;
+          newCacheEntries[cacheKey] = stop.coords;
+        }
+      }
+    } catch (err) {
+      console.warn('Geocode error for', fullAddr, err);
+      if (FALLBACK_COORDS[townKey]) {
+        stop.coords = FALLBACK_COORDS[townKey];
+        geocodeCache[cacheKey] = stop.coords;
+        newCacheEntries[cacheKey] = stop.coords;
+      }
+    }
+
+    // Rate limit (Nominatim requires 1 req/sec)
+    await sleep(1100);
+  }
+
+  // Save new cache entries
+  if (Object.keys(newCacheEntries).length > 0) {
+    try {
+      await fetch('/api/geocache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCacheEntries)
+      });
+    } catch (e) { console.warn('Cache save failed', e); }
+  }
+  hideLoading();
+}
+
+function buildAddress(stop) {
+  var parts = [];
+  if (stop.street) parts.push(stop.street.trim());
+  if (stop.town) parts.push(stop.town.trim());
+  parts.push('Taranaki');
+  parts.push('New Zealand');
+  return parts.join(', ');
+}
+
+async function nominatimGeocode(address) {
+  var url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+    q: address,
+    format: 'json',
+    limit: '1',
+    countrycodes: 'nz'
+  });
+  var resp = await fetch(url, {
+    headers: { 'User-Agent': 'NakiWreckRoutePlanner/1.0' }
+  });
+  var results = await resp.json();
+  if (results.length > 0) {
+    return {
+      lat: parseFloat(results[0].lat),
+      lng: parseFloat(results[0].lon)
+    };
+  }
+  return null;
+}
+
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+// ============================================================
+// RENDERING
+// ============================================================
+function renderSidebar() {
+  var list = document.getElementById('pickupList');
+  var corridors = ['north', 'south', 'coastal', 'unknown'];
+  var html = '';
+
+  for (var cor of corridors) {
+    var stops = allStops.filter(function(s) { return s.corridor === cor && !s._collected && !collectedIds.has(s.submission_ids[0]); });
+    if (stops.length === 0) continue;
+    if (currentFilter !== 'all' && currentFilter !== cor) continue;
+
+    var totalSpaces = stops.reduce(function(sum, s) { return sum + s.spaces; }, 0);
+    var corLabel = cor.charAt(0).toUpperCase() + cor.slice(1);
+
+    html += '<div class="corridor-group">';
+    html += '<div class="corridor-header ' + cor + '">' +
+      '<span>' + corLabel + ' Corridor (' + stops.length + ' stops)</span>' +
+      '<span>' + totalSpaces + ' spaces</span>' +
+    '</div>';
+
+    for (var stop of stops) {
+      var checked = stop.selected ? 'checked' : '';
+      var selClass = stop.selected ? 'selected' : '';
+      var orderBadge = stop.routeOrder !== null
+        ? '<span class="route-order">' + stop.routeOrder + '</span>'
+        : '';
+
+      // Show spaces count on pin when no route order
+      var pinLabel = stop.routeOrder !== null
+        ? stop.routeOrder
+        : stop.spaces;
+
+      html += '<div class="pickup-card ' + cor + ' ' + selClass + '" id="card-' + stop.id + '"' +
+                    ' onclick="panToStop(\'' + stop.id + '\')">' +
+        '<div class="top-row">' +
+          '<span class="name">' + orderBadge + esc(stop.first_name) + ' ' + esc(stop.last_name) + '</span>' +
+          '<span class="spaces">' + stop.spaces + ' space' + (stop.spaces !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+        '<div class="address" onclick="event.stopPropagation()">' +
+          '<a href="https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(stop.street + ', ' + stop.town + ', Taranaki, NZ') + '"' +
+             ' target="_blank" rel="noopener"' +
+             ' style="color:#3498db;text-decoration:none;border-bottom:1px dashed #3498db">' +
+            esc(stop.street) + ', ' + esc(stop.town) +
+          '</a>' +
+        '</div>' +
+        '<div class="phone-row">' +
+          '<a href="tel:' + esc(stop.phone) + '">' + esc(stop.phone) + '</a>' +
+        '</div>' +
+        '<div class="items">' + stop.appliances.map(function(a) { return esc(a); }).join(' | ') + '</div>' +
+        (stop.additional_info ? '<div class="additional">' + esc(stop.additional_info) + '</div>' : '') +
+        '<div class="date-tag">' + stop.dates.join(', ') + '</div>' +
+        '<div class="check-row" onclick="event.stopPropagation()" style="display:flex;gap:8px;align-items:center;justify-content:space-between">' +
+          '<label>' +
+            '<input type="checkbox" ' + checked + ' onchange="toggleStop(\'' + stop.id + '\', this.checked)">' +
+            ' Include' +
+          '</label>' +
+          '<button class="btn-collected" id="collect-' + stop.id + '" onclick="markCollected(\'' + stop.id + '\', \'' + esc(stop.submission_ids[0]) + '\', \'' + esc(stop.first_name) + ' ' + esc(stop.last_name) + '\')">' +
+            'Collected' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }
+    html += '</div>';
+  }
+
+  if (!html) {
+    html = '<p style="text-align:center;padding:40px;color:#8fbc8f;">No pickups in this corridor.</p>';
+  }
+
+  list.innerHTML = html;
+  updateCorridorTabCounts();
+}
+
+function renderMarkers() {
+  // Remove existing
+  for (var id in markers) {
+    map.removeLayer(markers[id]);
+  }
+  markers = {};
+
+  var bounds = [];
+
+  for (var stop of allStops) {
+    if (!stop.coords) continue;
+    if (stop._collected || collectedIds.has(stop.submission_ids[0])) continue;
+    if (currentFilter !== 'all' && currentFilter !== stop.corridor) continue;
+
+    var color = CORRIDOR_COLORS[stop.corridor] || '#9b59b6';
+    // Show route order number if optimized, otherwise show spaces count
+    var label = stop.routeOrder !== null ? String(stop.routeOrder) : String(stop.spaces);
+    var opacity = stop.selected ? 1.0 : 0.4;
+
+    var marker = L.marker([stop.coords.lat, stop.coords.lng], {
+      icon: makeIcon(color, label),
+      opacity: opacity,
+      zIndexOffset: stop.selected ? 500 : 0
+    }).addTo(map);
+
+    marker.bindPopup(
+      '<b>' + esc(stop.first_name) + ' ' + esc(stop.last_name) + '</b><br>' +
+      esc(stop.street) + ', ' + esc(stop.town) + '<br>' +
+      '<a href="tel:' + esc(stop.phone) + '">' + esc(stop.phone) + '</a><br>' +
+      '<em>' + stop.appliances.join(', ') + '</em><br>' +
+      '<b>' + stop.spaces + ' spaces</b>'
+    );
+
+    markers[stop.id] = marker;
+    bounds.push([stop.coords.lat, stop.coords.lng]);
+  }
+
+  // Add start/end to bounds
+  bounds.push([START_POINT.lat, START_POINT.lng]);
+  bounds.push([END_POINT.lat, END_POINT.lng]);
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+function updateCorridorTabCounts() {
+  var tabs = document.querySelectorAll('.corridor-tab');
+  tabs.forEach(function(tab) {
+    var cor = ['all', 'north', 'south', 'coastal', 'unknown'].find(function(c) { return tab.classList.contains(c); });
+    if (!cor) return;
+    var activeStops = allStops.filter(function(s) { return !s._collected && !collectedIds.has(s.submission_ids[0]); });
+    var count = cor === 'all'
+      ? activeStops.length
+      : activeStops.filter(function(s) { return s.corridor === cor; }).length;
+    var label = cor.charAt(0).toUpperCase() + cor.slice(1);
+    tab.textContent = cor === 'all' ? 'All (' + count + ')' : label + ' (' + count + ')';
+  });
+}
+
+// ============================================================
+// STATS BANNER
+// ============================================================
+function updateStats() {
+  var activeStops = allStops.filter(function(s) { return !s._collected && !collectedIds.has(s.submission_ids[0]); });
+  var totalSpaces = activeStops.reduce(function(sum, s) { return sum + s.spaces; }, 0);
+  var selectedCount = activeStops.filter(function(s) { return s.selected; }).length;
+
+  document.getElementById('statPickups').textContent = activeStops.length;
+  document.getElementById('statSpaces').textContent = totalSpaces;
+  document.getElementById('statSelected').textContent = selectedCount;
+  document.getElementById('statCollected').textContent = collectedIds.size;
+}
+
+// ============================================================
+// INTERACTIONS
+// ============================================================
+function toggleStop(id, checked) {
+  var stop = allStops.find(function(s) { return s.id === id; });
+  if (stop) {
+    stop.selected = checked;
+    renderSidebar();
+    renderMarkers();
+    updateLoad();
+    updateStats();
+  }
+}
+
+function panToStop(id) {
+  var stop = allStops.find(function(s) { return s.id === id; });
+  if (stop && stop.coords) {
+    map.setView([stop.coords.lat, stop.coords.lng], 14);
+    if (markers[id]) markers[id].openPopup();
+  }
+}
+
+function filterCorridor(cor) {
+  currentFilter = cor;
+  document.querySelectorAll('.corridor-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelector('.corridor-tab.' + cor).classList.add('active');
+  renderSidebar();
+  renderMarkers();
+  updateLoad();
+  updateStats();
+}
+
+// ============================================================
+// LOAD CALCULATOR
+// ============================================================
+function updateLoad() {
+  // Only count stops from the active corridor filter
+  var filtered = allStops.filter(function(s) { return s.selected && !s._collected && !collectedIds.has(s.submission_ids[0]); });
+  if (currentFilter !== 'all') {
+    filtered = filtered.filter(function(s) { return s.corridor === currentFilter; });
+  }
+  var total = filtered.reduce(function(sum, s) { return sum + s.spaces; }, 0);
+
+  // Split: trailer fills first, overflow goes to ute
+  var onTrailer = Math.min(total, TRAILER_CAP);
+  var overflow = Math.max(0, total - TRAILER_CAP);
+  var onUte = Math.min(overflow, UTE_CAP);
+  var overCapacity = total > (TRAILER_CAP + UTE_CAP);
+  var needsDropoff = overflow > 0;
+
+  // Trailer bar
+  var trailerPct = Math.min(100, (onTrailer / TRAILER_CAP) * 100);
+  var trailerBar = document.getElementById('trailerBar');
+  trailerBar.style.width = trailerPct + '%';
+  trailerBar.className = 'load-bar-fill' +
+    (onTrailer >= TRAILER_CAP ? ' warn' : '');
+  document.getElementById('trailerCount').textContent = onTrailer + ' / ' + TRAILER_CAP;
+
+  // Ute bar
+  var utePct = Math.min(100, (onUte / UTE_CAP) * 100);
+  var uteBar = document.getElementById('uteBar');
+  uteBar.style.width = utePct + '%';
+  uteBar.className = 'load-bar-fill' +
+    (onUte > UTE_CAP ? ' over' : onUte > 0 ? ' warn' : '');
+  document.getElementById('uteCount').textContent = onUte + ' / ' + UTE_CAP;
+
+  // Total
+  var totalEl = document.getElementById('totalSpaces');
+  totalEl.textContent = total + ' items';
+  totalEl.className = 'load-total' +
+    (overCapacity ? ' over' : needsDropoff ? ' warn' : '');
+
+  // Warning
+  var warn = document.getElementById('loadWarning');
+  if (overCapacity) {
+    warn.textContent = 'Over capacity by ' + (total - TRAILER_CAP - UTE_CAP) + ' — need to drop off and come back';
+    warn.classList.add('show');
+  } else if (needsDropoff) {
+    warn.textContent = 'Trailer full — ' + onUte + ' items on ute';
+    warn.classList.add('show');
+  } else {
+    warn.classList.remove('show');
+  }
+}
+
+// ============================================================
+// ROUTE OPTIMIZATION
+// ============================================================
+async function optimizeRoute() {
+  var selected = allStops.filter(function(s) { return s.selected && s.coords; });
+  if (selected.length === 0) {
+    showToast('No stops selected or no coordinates');
+    return;
+  }
+
+  showLoading('Optimizing route via OSRM...');
+  setStatus('Sending to OSRM trip API...');
+
+  // Build coordinates string: start + stops + end
+  var coords = [
+    START_POINT.lng + ',' + START_POINT.lat,
+    ...selected.map(function(s) { return s.coords.lng + ',' + s.coords.lat; }),
+    END_POINT.lng + ',' + END_POINT.lat
+  ].join(';');
+
+  // Source=first, destination=last to fix start/end
+  var url = 'https://router.project-osrm.org/trip/v1/driving/' + coords +
+    '?source=first&destination=last&roundtrip=false&geometries=geojson&overview=full';
+
+  try {
+    var resp = await fetch(url);
+    var data = await resp.json();
+
+    if (data.code !== 'Ok') {
+      showToast('OSRM error: ' + (data.message || data.code));
+      hideLoading();
+      return;
+    }
+
+    var trip = data.trips[0];
+    var waypoints = data.waypoints;
+
+    // Clear old route
+    if (routeLayer) map.removeLayer(routeLayer);
+
+    // Draw route
+    var routeCoords = trip.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+    routeLayer = L.polyline(routeCoords, {
+      color: '#2ecc40',
+      weight: 4,
+      opacity: 0.8
+    }).addTo(map);
+
+    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+
+    // Update stop order from waypoints
+    allStops.forEach(function(s) { s.routeOrder = null; });
+    optimizedOrder = [];
+
+    var wpOrder = [];
+    for (var i = 1; i < waypoints.length - 1; i++) {
+      wpOrder.push({
+        stopIdx: i - 1,
+        tripOrder: waypoints[i].waypoint_index
+      });
+    }
+    wpOrder.sort(function(a, b) { return a.tripOrder - b.tripOrder; });
+
+    for (var order = 0; order < wpOrder.length; order++) {
+      var stopIdx = wpOrder[order].stopIdx;
+      selected[stopIdx].routeOrder = order + 1;
+      optimizedOrder.push(selected[stopIdx]);
+    }
+
+    // Show route info
+    var dist = (trip.distance / 1000).toFixed(1);
+    var time = Math.round(trip.duration / 60);
+    document.getElementById('routeStops').textContent = selected.length;
+    document.getElementById('routeDist').textContent = dist;
+    document.getElementById('routeTime').textContent = time;
+    document.getElementById('routeInfo').classList.add('show');
+
+    setStatus('Route optimized: ' + dist + ' km, ~' + time + ' min');
+    showToast('Route optimized: ' + dist + 'km, ' + time + 'min');
+
+    renderSidebar();
+    renderMarkers();
+  } catch (err) {
+    showToast('Route optimization failed');
+    setStatus('Route error: ' + err.message);
+  }
+
+  hideLoading();
+}
+
+// ============================================================
+// GOOGLE MAPS LINKS
+// ============================================================
+function openGoogleMaps() {
+  // Use optimized order if available, otherwise just selected stops
+  var stops;
+  if (optimizedOrder && optimizedOrder.length > 0) {
+    stops = optimizedOrder.filter(function(s) { return s.coords; });
+  } else {
+    stops = allStops.filter(function(s) { return s.selected && s.coords; });
+  }
+
+  if (stops.length === 0) {
+    showToast('No stops selected with coordinates');
+    return;
+  }
+
+  // Google Maps allows max ~9 waypoints per URL
+  var MAX_WAYPOINTS = 9;
+  var links = [];
+
+  // Split stops into chunks
+  for (var i = 0; i < stops.length; i += MAX_WAYPOINTS) {
+    var chunk = stops.slice(i, i + MAX_WAYPOINTS);
+    var isFirst = (i === 0);
+    var isLast = (i + MAX_WAYPOINTS >= stops.length);
+
+    var waypoints = [];
+
+    if (isFirst) {
+      waypoints.push(START_POINT.lat + ',' + START_POINT.lng);
+    } else {
+      var prevStop = stops[i - 1];
+      waypoints.push(prevStop.coords.lat + ',' + prevStop.coords.lng);
+    }
+
+    for (var s of chunk) {
+      waypoints.push(s.coords.lat + ',' + s.coords.lng);
+    }
+
+    if (isLast) {
+      waypoints.push(END_POINT.lat + ',' + END_POINT.lng);
+    }
+
+    var url = 'https://www.google.com/maps/dir/' + waypoints.join('/');
+    links.push({
+      label: links.length === 0 && stops.length <= MAX_WAYPOINTS
+        ? 'Open Route in Google Maps'
+        : 'Part ' + (links.length + 1),
+      url: url
+    });
+  }
+
+  // Show modal
+  var container = document.getElementById('gmapsLinks');
+  container.innerHTML = links.map(function(l) {
+    return '<a class="gmaps-link" href="' + l.url + '" target="_blank">' + l.label + '</a>';
+  }).join('');
+  document.getElementById('gmapsModal').classList.add('show');
+}
+
+function closeGmapsModal() {
+  document.getElementById('gmapsModal').classList.remove('show');
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function esc(str) {
+  if (!str) return '';
+  var d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text || 'Loading...';
+  document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+function setStatus(text) {
+  document.getElementById('statusText').textContent = text;
+}
+function setStatusCount(text) {
+  document.getElementById('statusCount').textContent = text;
+}
+
+// ============================================================
+// CUSTOMER COMMS PANEL
+// ============================================================
+function showCommsPanel() {
+  var selected = getSelectedStops();
+  if (selected.length === 0) { showToast('No stops selected'); return; }
+
+  var day = prompt('What day are the pickups? (e.g. Thursday)', 'Thursday');
+  if (!day) return;
+
+  var html = '<div class="comms-overlay" onclick="if(event.target===this)this.remove()">';
+  html += '<div class="comms-panel">';
+  html += '<h2 style="color:#2ecc40;margin-bottom:16px">Customer Texts — ' + day + ' (' + selected.length + ' stops)</h2>';
+
+  html += '<h3 style="color:#e67e22;margin:12px 0 8px">Evening Reminders (send 2 nights before):</h3>';
+  selected.forEach(function(s) {
+    var items = s.appliances.join(', ') || 'whiteware pickup';
+    var msg = 'Hey ' + s.first_name + ', just a reminder I\'ve got you booked in for ' + day + ' for ' + items + '. I\'ll text you when I\'m on my way :)';
+    html += '<div class="comms-msg" onclick="copyCommsMsg(this)">';
+    html += '<div style="color:#8fbc8f;font-size:12px">' + s.first_name + ' ' + s.last_name + ' — ' + s.phone + '</div>';
+    html += '<div class="comms-text" style="color:#fff;margin-top:4px">' + msg + '</div>';
+    html += '<div class="copied-flash">Copied!</div>';
+    html += '</div>';
+  });
+
+  html += '<h3 style="color:#3498db;margin:16px 0 8px">On-My-Way Texts (morning of):</h3>';
+  selected.forEach(function(s) {
+    var msg = 'Hey ' + s.first_name + ', just heading your way now — should be about 20 mins :)';
+    html += '<div class="comms-msg" onclick="copyCommsMsg(this)">';
+    html += '<div style="color:#8fbc8f;font-size:12px">' + s.first_name + ' ' + s.last_name + ' — ' + s.phone + '</div>';
+    html += '<div class="comms-text" style="color:#fff;margin-top:4px">' + msg + '</div>';
+    html += '<div class="copied-flash">Copied!</div>';
+    html += '</div>';
+  });
+
+  html += '<h3 style="color:#9b59b6;margin:16px 0 8px">Review Requests (1-2 days after):</h3>';
+  selected.forEach(function(s) {
+    var items = s.appliances.join(', ') || 'whiteware pickup';
+    var msg = 'Hey ' + s.first_name + ', hope the ' + items + ' went well! If you\'ve got a sec, a quick Google review would be awesome — really helps out. Cheers :)';
+    html += '<div class="comms-msg" onclick="copyCommsMsg(this)">';
+    html += '<div style="color:#8fbc8f;font-size:12px">' + s.first_name + ' ' + s.last_name + ' — ' + s.phone + '</div>';
+    html += '<div class="comms-text" style="color:#fff;margin-top:4px">' + msg + '</div>';
+    html += '<div class="copied-flash">Copied!</div>';
+    html += '</div>';
+  });
+
+  html += '<div style="margin-top:16px">';
+  html += '<button onclick="this.closest(\'.comms-overlay\').remove()" style="width:100%;padding:14px;background:#555;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;min-height:48px;font-size:14px">Close</button>';
+  html += '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function copyCommsMsg(el) {
+  var text = el.querySelector('.comms-text').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    el.classList.add('copied');
+    showToast('Copied to clipboard');
+    setTimeout(function() { el.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ============================================================
+// Helper: get selected stops data (BUG FIX: use allStops state, not DOM)
+// ============================================================
+function getSelectedStops() {
+  // Use the actual state — allStops tracks selection via .selected property
+  var selected = allStops.filter(function(s) {
+    return s.selected && !s._collected && !collectedIds.has(s.submission_ids[0]);
+  });
+  if (optimizedOrder && optimizedOrder.length > 0) {
+    // Return in optimized order
+    return optimizedOrder.filter(function(s) {
+      return s.selected && !s._collected && !collectedIds.has(s.submission_ids[0]);
+    });
+  }
+  return selected;
+}
+
+// Helper: build Google Maps URL for selected stops
+function buildGoogleMapsUrl(stops) {
+  var start = START_POINT.lat + ',' + START_POINT.lng;
+  var end = END_POINT.lat + ',' + END_POINT.lng;
+  var waypoints = stops.slice(0, 9).map(function(s) {
+    if (s.coords) return s.coords.lat + ',' + s.coords.lng;
+    return encodeURIComponent(s.street + ', ' + s.town + ', NZ');
+  });
+  return 'https://www.google.com/maps/dir/' + [start].concat(waypoints).concat([end]).join('/');
+}
+
+// ============================================================
+// COLLECTED ITEMS
+// ============================================================
+var collectedIds = new Set();
+
+// Load collected from localStorage (works offline too)
+try {
+  var saved = JSON.parse(localStorage.getItem('collectedIds') || '[]');
+  collectedIds = new Set(saved);
+} catch(e) {}
+
+function markCollected(stopId, submissionId, name) {
+  var btn = document.getElementById('collect-' + stopId);
+
+  // Double-tap confirmation: first tap shows "Tap again", second tap confirms
+  if (collectingTimers[stopId]) {
+    // Second tap — actually collect it
+    clearTimeout(collectingTimers[stopId]);
+    delete collectingTimers[stopId];
+
+    if (btn) {
+      btn.textContent = 'Done!';
+      btn.classList.remove('confirming');
+      btn.classList.add('done');
+    }
+
+    // Save locally
+    collectedIds.add(submissionId);
+    localStorage.setItem('collectedIds', JSON.stringify([...collectedIds]));
+
+    // Try to save to server too
+    fetch('/api/mark-collected', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({submission_id: submissionId, name: name})
+    }).catch(function() {});
+
+    // Remove from display after brief delay
+    setTimeout(function() {
+      var stop = allStops.find(function(s) { return s.id === stopId; });
+      if (stop) {
+        stop.selected = false;
+        stop._collected = true;
+      }
+      renderSidebar();
+      renderMarkers();
+      updateLoad();
+      updateStats();
+      showToast(name + ' marked as collected');
+    }, 500);
+
+  } else {
+    // First tap — show confirmation state
+    if (btn) {
+      btn.textContent = 'Tap again';
+      btn.classList.add('confirming');
+    }
+
+    // Auto-reset after 3 seconds if no second tap
+    collectingTimers[stopId] = setTimeout(function() {
+      delete collectingTimers[stopId];
+      if (btn) {
+        btn.textContent = 'Collected';
+        btn.classList.remove('confirming');
+      }
+    }, 3000);
+  }
+}
+
+// ============================================================
+// DRAGGABLE SPLIT SCREEN
+// ============================================================
+(function initDragHandle() {
+  var handle = document.getElementById('dragHandle');
+  var container = document.getElementById('mainContainer');
+  var mapEl = document.querySelector('.map-container');
+  var sidebar = document.getElementById('sidebar');
+  var dragging = false;
+  var startY = 0;
+  var startMapFlex = 6;
+  var startSidebarFlex = 4;
+
+  function getFlex(el) {
+    return parseFloat(getComputedStyle(el).flexGrow) || 1;
+  }
+
+  function onStart(e) {
+    if (window.innerWidth > 900) return;
+    dragging = true;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    startMapFlex = getFlex(mapEl);
+    startSidebarFlex = getFlex(sidebar);
+    document.body.style.cursor = 'ns-resize';
+    e.preventDefault();
+  }
+
+  function onMove(e) {
+    if (!dragging) return;
+    var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    var containerH = container.offsetHeight;
+    var delta = clientY - startY;
+    var deltaRatio = delta / containerH * (startMapFlex + startSidebarFlex);
+
+    var newMapFlex = startMapFlex + deltaRatio;
+    var newSidebarFlex = startSidebarFlex - deltaRatio;
+
+    // Clamp — minimum 15% each
+    var minFlex = (startMapFlex + startSidebarFlex) * 0.15;
+    if (newMapFlex < minFlex) { newMapFlex = minFlex; newSidebarFlex = startMapFlex + startSidebarFlex - minFlex; }
+    if (newSidebarFlex < minFlex) { newSidebarFlex = minFlex; newMapFlex = startMapFlex + startSidebarFlex - minFlex; }
+
+    mapEl.style.flex = newMapFlex;
+    sidebar.style.flex = newSidebarFlex;
+    e.preventDefault();
+  }
+
+  function onEnd() {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = '';
+    // Refresh map tiles after resize
+    setTimeout(function() { map.invalidateSize(); }, 100);
+  }
+
+  handle.addEventListener('mousedown', onStart);
+  handle.addEventListener('touchstart', onStart, { passive: false });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('touchend', onEnd);
+})();
+
+// ============================================================
+// INIT
+// ============================================================
+initMap();
+loadPickups();
+</script>
+</body>
+</html>

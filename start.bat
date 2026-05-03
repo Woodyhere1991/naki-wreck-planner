@@ -1,0 +1,33 @@
+@echo off
+title Naki Wreck Ops HQ
+echo ============================================
+echo   Naki Wreck Ops HQ
+echo   Starting on http://localhost:5555
+echo ============================================
+echo.
+
+cd /d "%~dp0"
+
+:: Check Python
+where python >nul 2>nul
+if %errorlevel% neq 0 (
+    echo ERROR: Python not found. Install Python first.
+    pause
+    exit /b 1
+)
+
+:: Check Flask
+python -c "import flask" >nul 2>nul
+if %errorlevel% neq 0 (
+    echo Flask not installed. Installing now...
+    pip install flask
+    echo.
+)
+
+:: Start browser after 2 seconds
+start "" /b cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:5555"
+
+:: Run the app
+python app.py
+
+pause

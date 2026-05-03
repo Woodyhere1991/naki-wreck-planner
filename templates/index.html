@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Naki Wreck Ops">
+  <meta name="theme-color" content="#101820">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/static/icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/static/ops.css">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="/static/ops.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js").catch(function () {});
+      });
+    }
+  </script>
+  <title>Naki Wreck Ops HQ</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark">NW</div>
+      <div>
+        <h1>Naki Wreck Ops</h1>
+        <p id="syncLine">Loading pickup sheet...</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <a class="ghost-link" href="/classic" title="Open the previous route planner">Classic</a>
+      <button class="icon-btn" id="demoBtn" type="button" title="Load demo pickups">Demo</button>
+      <button class="primary-btn" id="refreshBtn" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Main views">
+    <button class="tab active" data-view="route" type="button">Route</button>
+    <button class="tab" data-view="customers" type="button">Stops</button>
+    <button class="tab" data-view="texts" type="button">Texts</button>
+    <button class="tab" data-view="dashboard" type="button">Plan</button>
+    <button class="tab" data-view="admin" type="button">Admin</button>
+  </nav>
+
+  <main class="shell">
+    <section class="view" id="dashboardView">
+      <div class="metric-grid" id="metricGrid"></div>
+
+      <div class="dashboard-grid">
+        <section class="panel run-builder">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Run builder</p>
+              <h2>Pick the work that makes sense today</h2>
+            </div>
+            <button class="soft-btn" id="clearRouteBtn" type="button">Clear route</button>
+          </div>
+
+          <div class="segmented" id="corridorControls">
+            <button class="active" data-corridor="all" type="button">All</button>
+            <button data-corridor="north" type="button">North</button>
+            <button data-corridor="south" type="button">South</button>
+            <button data-corridor="coastal" type="button">Coastal</button>
+            <button data-corridor="unknown" type="button">Check</button>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-btn" id="selectVisibleBtn" type="button">Select visible</button>
+            <button class="soft-btn" id="deselectVisibleBtn" type="button">Deselect visible</button>
+            <button class="soft-btn" id="selectCapacityBtn" type="button">Fill one load</button>
+          </div>
+
+          <div class="load-panel">
+            <div class="load-summary">
+              <div>
+                <span class="label">Selected load</span>
+                <strong id="loadTotalText">0 spaces</strong>
+              </div>
+              <span class="status-pill" id="loadStatusPill">Empty</span>
+            </div>
+            <div class="bar-block">
+              <div class="bar-label"><span>Trailer</span><span id="trailerText">0 / 18</span></div>
+              <div class="bar"><span id="trailerBar"></span></div>
+            </div>
+            <div class="bar-block">
+              <div class="bar-label"><span>Ute overflow</span><span id="uteText">0 / 8</span></div>
+              <div class="bar"><span id="uteBar"></span></div>
+            </div>
+            <p class="hint" id="loadHint">Select stops to build a pickup run.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Readiness</p>
+              <h2>Before you leave the driveway</h2>
+            </div>
+          </div>
+          <div class="checklist" id="readinessList"></div>
+        </section>
+
+        <section class="panel wide">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Corridors</p>
+              <h2>Where the open work is sitting</h2>
+            </div>
+          </div>
+          <div class="corridor-board" id="corridorBoard"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view active" id="routeView">
+      <div class="route-layout">
+        <section class="map-panel">
+          <div id="map"></div>
+          <div class="map-empty" id="mapEmpty">Map is loading...</div>
+          <button class="map-search-btn" id="routeSearchBtn" type="button">Search / add stop</button>
+          <div class="savings-chip" id="savingsChip">
+            <span>You planned</span>
+            <strong id="savingsText">0 stops</strong>
+          </div>
+          <div class="map-tools">
+            <button class="primary-btn" id="optimizeBtn" type="button">Optimise</button>
+            <button class="soft-btn" id="gmapsBtn" type="button">Google Maps</button>
+            <button class="soft-btn" id="fitMapBtn" type="button">Big map</button>
+          </div>
+        </section>
+        <aside class="panel route-list-panel zeo-sheet">
+          <div class="route-day-head">
+            <div>
+              <h2 id="routeDateTitle">Today</h2>
+              <p id="routeMetaLine">0 Stops - 0 Spaces - ready when you are</p>
+            </div>
+            <button class="round-add-btn" id="routeAddBtn" type="button">+</button>
+          </div>
+          <div class="route-summary-strip" id="routeSummaryStrip"></div>
+          <div class="stop-list route-list" id="routeList"></div>
+          <div class="trip-bar">
+            <button class="soft-btn square-btn" id="routeLoadBtn" type="button">Load</button>
+            <button class="soft-btn" id="routeReorganiseBtn" type="button">Reorganise</button>
+            <button class="primary-btn" id="routeStartBtn" type="button">Start trip</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" id="customersView">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Stops</p>
+            <h2>Open pickups, cleanup, and quick actions</h2>
+          </div>
+          <div class="inline-controls">
+            <input id="searchInput" type="search" placeholder="Search name, phone, address">
+            <button class="soft-btn" id="exportCsvBtn" type="button">Export CSV</button>
+          </div>
+        </div>
+        <div class="customer-toolbar">
+          <label><input id="onlySelectedToggle" type="checkbox"> Selected only</label>
+          <label><input id="missingCoordsToggle" type="checkbox"> Missing map pin</label>
+          <label><input id="missingPhoneToggle" type="checkbox"> Missing phone</label>
+        </div>
+        <div class="stop-list" id="customerList"></div>
+      </section>
+    </section>
+
+    <section class="view" id="textsView">
+      <div class="texts-layout">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Customer texts</p>
+              <h2>Copy-ready messages for the selected run</h2>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label>Pickup day <input id="pickupDayInput" type="text" value="Thursday"></label>
+            <label>Window <input id="pickupWindowInput" type="text" value="between 9am and 3pm"></label>
+            <label>Driver note <input id="driverNoteInput" type="text" value="I will text when I am on my way"></label>
+          </div>
+          <div class="segmented message-tabs" id="messageModeControls">
+            <button class="active" data-message-mode="reminder" type="button">Reminder</button>
+            <button data-message-mode="onway" type="button">On my way</button>
+            <button data-message-mode="review" type="button">Review</button>
+            <button data-message-mode="problem" type="button">Issue</button>
+          </div>
+          <div class="action-row">
+            <button class="primary-btn" id="copyAllTextsBtn" type="button">Copy all texts</button>
+            <button class="soft-btn" id="printRunSheetBtn" type="button">Print run sheet</button>
+          </div>
+          <div class="text-list" id="textList"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Run sheet</p>
+              <h2>What to collect, in order</h2>
+            </div>
+          </div>
+          <pre class="run-sheet" id="runSheet"></pre>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" id="adminView">
+      <div class="admin-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">One-off stop</p>
+              <h2>Add a pickup that is not in the sheet yet</h2>
+            </div>
+          </div>
+          <form class="draft-form" id="draftForm">
+            <label>Name <input name="name" required placeholder="Customer name"></label>
+            <label>Phone <input name="phone" placeholder="021..."></label>
+            <label>Street <input name="street" required placeholder="8 King Road"></label>
+            <label>Town <input name="town" required placeholder="Inglewood"></label>
+            <label>Items <input name="items" required placeholder="Fridge, washer"></label>
+            <label>Notes <input name="notes" placeholder="Gate code, driveway, cash"></label>
+            <button class="primary-btn" type="submit">Add local stop</button>
+          </form>
+          <div class="action-row">
+            <button class="soft-btn danger" id="clearDraftsBtn" type="button">Clear local stops</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Data cleanup</p>
+              <h2>Things that will slow you down</h2>
+            </div>
+            <button class="soft-btn" id="findPinsBtn" type="button">Find missing pins</button>
+          </div>
+          <div class="cleanup-list" id="cleanupList"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Operating rules</p>
+              <h2>The planner is using these numbers</h2>
+            </div>
+          </div>
+          <dl class="rules-list">
+            <div><dt>Start</dt><dd>10 Tawa St, Inglewood</dd></div>
+            <div><dt>Drop-off</dt><dd>Global Metal Solutions, 146 Connett Rd, Bell Block</dd></div>
+            <div><dt>Trailer</dt><dd>18 standard spaces</dd></div>
+            <div><dt>Ute overflow</dt><dd>8 conservative spaces</dd></div>
+            <div><dt>Large items</dt><dd>Chest freezers, double-door/french-door fridges, large freezers count as 2</dd></div>
+          </dl>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="mapsModal" hidden>
+    <section class="modal">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Navigation</p>
+          <h2>Open this run in Google Maps</h2>
+        </div>
+        <button class="icon-btn" id="closeMapsModalBtn" type="button">Close</button>
+      </div>
+      <div id="mapsLinks" class="maps-links"></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="addStopModal" hidden>
+    <section class="modal add-stop-modal">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Add stops</p>
+          <h2>Bring new pickups into today's run</h2>
+        </div>
+        <button class="icon-btn" id="closeAddStopModalBtn" type="button">Close</button>
+      </div>
+      <div class="add-search">
+        <input id="quickAddressInput" type="text" placeholder="Address, town, or paste lat,lng">
+        <button class="primary-btn" id="quickAddressBtn" type="button">Add</button>
+      </div>
+      <p class="add-hint">Paste a Google Maps coord like <code>-39.05, 174.07</code> to drop a pin without an address.</p>
+      <div class="import-grid">
+        <label class="import-card">
+          <span>Import CSV</span>
+          <small>Name, phone, street, town, items</small>
+          <input id="csvStopInput" type="file" accept=".csv,text/csv">
+        </label>
+        <button class="import-card" id="bulkPasteToggle" type="button">
+          <span>Paste list</span>
+          <small>One pickup per line</small>
+        </button>
+        <button class="import-card" id="manualStopFocusBtn" type="button">
+          <span>Manual stop</span>
+          <small>Add the details yourself</small>
+        </button>
+      </div>
+      <div class="bulk-paste" id="bulkPasteBox" hidden>
+        <textarea id="bulkStopsInput" rows="5" placeholder="Name, phone, street, town, item"></textarea>
+        <button class="primary-btn" id="addBulkStopsBtn" type="button">Add pasted stops</button>
+      </div>
+      <form class="draft-form modal-draft-form" id="quickDraftForm">
+        <label>Name <input name="name" required placeholder="Customer name"></label>
+        <label>Phone <input name="phone" placeholder="021..."></label>
+        <label>Street <input name="street" required placeholder="8 King Road"></label>
+        <label>Town <input name="town" required placeholder="Inglewood"></label>
+        <label>Items <input name="items" required placeholder="Fridge, washer"></label>
+        <label>Notes <input name="notes" placeholder="Gate code, driveway, cash"></label>
+        <button class="primary-btn" type="submit">Add to run</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+</body>
+</html>
