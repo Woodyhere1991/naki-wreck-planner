@@ -858,6 +858,30 @@ h2 {
   font-weight: 900;
 }
 
+.priority-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #ffd166;
+  color: #2c1c00;
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.stop-card.priority {
+  border-color: #ffd166;
+  box-shadow: inset 4px 0 0 #ffd166;
+}
+
+.mini-btn.primary {
+  background: var(--blue);
+  color: #06111d;
+  border-color: rgba(75, 163, 255, 0.85);
+}
+
 .inline-controls input,
 .form-grid input,
 .draft-form input {

@@ -213,6 +213,135 @@ def update_geocache():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/geocode-missing", methods=["POST"])
+def geocode_missing():
+    """For each open pickup without a precise pin, query Nominatim with a
+    progressive fallback chain (full address > street + town > town only)
+    and write any new coords to the cache so /api/pickups serves them next.
+
+    Body (optional): {"provider": "google"|"nominatim", "google_key": "..."}
+    Default: nominatim (free).
+    """
+    try:
+        import csv
+        import io
+        import time
+        cache = load_geocache()
+        # Pull current pickups
+        sheet_url = (
+            f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+            f"/gviz/tq?tqx=out:csv&sheet={urllib.parse.quote(SHEET_TAB)}"
+        )
+        rows = list(csv.reader(io.StringIO(
+            urllib.request.urlopen(sheet_url, timeout=15).read().decode("utf-8")
+        )))
+        targets = []
+        for row in rows[1:]:
+            while len(row) < 25:
+                row.append("")
+            name = (row[1].strip() + " " + row[2].strip()).strip()
+            street = row[5].strip()
+            town = row[6].strip()
+            lat = row[23].strip()
+            lng = row[24].strip()
+            status = row[22].strip().upper() if len(row) > 22 else ""
+            if status == "DONE":
+                continue
+            if not name and not street:
+                continue
+            if lat and lng:
+                continue  # already has a precise pin from the sheet
+            key = " ".join((", ".join(p for p in [street, town, "Taranaki", "New Zealand"] if p)).lower().split())
+            if key in cache:
+                continue
+            targets.append({"name": name, "street": street, "town": town, "key": key})
+
+        body = request.get_json(silent=True) or {}
+        google_key = body.get("google_key", "").strip() or os.environ.get("GOOGLE_GEOCODING_KEY", "").strip()
+        # Default to Google when a key is set (more accurate on rural NZ),
+        # otherwise free Nominatim.
+        default_provider = "google" if google_key else "nominatim"
+        provider = (body.get("provider") or default_provider).lower()
+
+        new_entries = {}
+        for t in targets:
+            coords = None
+            if provider == "google" and google_key:
+                coords = _google_geocode(t, google_key)
+            else:
+                coords = _nominatim_chain(t)
+                time.sleep(1.05)
+            if coords:
+                cache[t["key"]] = coords
+                new_entries[t["key"]] = coords
+
+        if new_entries:
+            save_geocache(cache)
+        return jsonify({
+            "status": "ok",
+            "considered": len(targets),
+            "geocoded": len(new_entries),
+            "provider": provider,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def _nominatim_chain(stop):
+    """Progressive fallback: full -> street+town -> street only -> town only."""
+    queries = []
+    street = stop["street"]
+    town = stop["town"]
+    if street and town:
+        queries.append(f"{street}, {town}, Taranaki, New Zealand")
+        if " " in street and street.split()[0][0].isdigit():
+            road = " ".join(street.split()[1:])
+            if road:
+                queries.append(f"{road}, {town}, Taranaki, New Zealand")
+    if street:
+        queries.append(f"{street}, Taranaki, New Zealand")
+    if town:
+        queries.append(f"{town}, Taranaki, New Zealand")
+    seen = set()
+    for q in queries:
+        if q in seen:
+            continue
+        seen.add(q)
+        try:
+            url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
+                "q": q, "format": "json", "limit": "1", "countrycodes": "nz",
+            })
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "NakiWreckOps/1.0 (nakiwreckremoval@gmail.com)",
+                "Accept": "application/json",
+            })
+            r = json.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
+            if r:
+                return {"lat": float(r[0]["lat"]), "lng": float(r[0]["lon"])}
+        except Exception:
+            pass
+    return None
+
+
+def _google_geocode(stop, api_key):
+    address = ", ".join(p for p in [stop["street"], stop["town"], "Taranaki", "New Zealand"] if p)
+    url = "https://maps.googleapis.com/maps/api/geocode/json?" + urllib.parse.urlencode({
+        "address": address,
+        "key": api_key,
+        "region": "nz",
+        "components": "country:NZ",
+    })
+    try:
+        r = json.loads(urllib.request.urlopen(url, timeout=15).read().decode("utf-8"))
+        results = r.get("results") or []
+        if results:
+            loc = results[0]["geometry"]["location"]
+            return {"lat": float(loc["lat"]), "lng": float(loc["lng"])}
+    except Exception:
+        pass
+    return None
+
+
 @app.route("/api/mark-collected", methods=["POST"])
 def mark_collected():
     """Mark a pickup as collected — stores in local file, synced back to sheet by local script."""

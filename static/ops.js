@@ -107,6 +107,11 @@
     "commercial",
     "upright freezer large"
   ];
+  // Items that squeeze in between things and don't take a real "space".
+  var FREE_ITEMS = [
+    "tv", "television", "microwave", "gas bottle", "gasbottle", "lpg",
+    "small heater", "toaster", "kettle", "iron"
+  ];
 
   var state = {
     rawPickups: [],
@@ -129,7 +134,9 @@
     routeLayer: null,
     mapReady: false,
     tripMode: false,
-    tripCurrentId: null
+    tripCurrentId: null,
+    priorityIds: new Set(),
+    manualOrder: []
   };
 
   var el = {};
@@ -284,6 +291,16 @@
     } catch (err2) {
       state.collectedIds = new Set();
     }
+    try {
+      state.priorityIds = new Set(JSON.parse(localStorage.getItem("nakiPriorityStops") || "[]"));
+    } catch (err3) {
+      state.priorityIds = new Set();
+    }
+    try {
+      state.manualOrder = JSON.parse(localStorage.getItem("nakiManualOrder") || "[]");
+    } catch (err4) {
+      state.manualOrder = [];
+    }
   }
 
   function saveSelectedState() {
@@ -292,6 +309,14 @@
 
   function saveCollectedState() {
     localStorage.setItem("collectedIds", JSON.stringify(Array.from(state.collectedIds)));
+  }
+
+  function savePriorityState() {
+    localStorage.setItem("nakiPriorityStops", JSON.stringify(Array.from(state.priorityIds)));
+  }
+
+  function saveManualOrder() {
+    localStorage.setItem("nakiManualOrder", JSON.stringify(state.manualOrder));
   }
 
   async function loadPickups(useDemo) {
@@ -319,6 +344,11 @@
       state.lastSync = new Date();
       setSyncLine();
       toast(useDemo ? "Demo pickups loaded" : "Pickup sheet refreshed");
+
+      // Auto-fill any missing precise pins via Nominatim. Runs in background;
+      // doesn't block the UI. New pins land in the cache and the next render
+      // picks them up.
+      if (!useDemo) autoFillMissingPins(loadSeq);
     } catch (err) {
       if (loadSeq !== state.loadSeq) return;
       setSyncLine("Could not load pickups: " + err.message + ". Try Demo to preview the system.");
@@ -342,6 +372,51 @@
       saveCollectedState();
     } catch (err) {
       // Local collected state still works when offline.
+    }
+  }
+
+  async function autoFillMissingPins(loadSeq) {
+    // Stops that need a real pin (no precise sheet/cache coords yet)
+    var missing = activeStops().filter(function (s) {
+      return s.street && (s.coordQuality === "missing" || s.coordQuality === "town");
+    });
+    if (!missing.length) return;
+    // Tell the user once, then remember consent
+    var consent = localStorage.getItem("nakiAutoGeocodeConsent");
+    if (consent !== "yes") {
+      var ok = window.confirm(
+        "Naki Wreck Ops can auto-find precise map pins for new addresses every " +
+        "time you tap Refresh. It sends each unknown address to OpenStreetMap " +
+        "(free, no account needed). The address is sent without the customer's " +
+        "name or phone. Allow this from now on?"
+      );
+      if (!ok) {
+        localStorage.setItem("nakiAutoGeocodeConsent", "no");
+        toast("Auto pin-finding stays off");
+        return;
+      }
+      localStorage.setItem("nakiAutoGeocodeConsent", "yes");
+    }
+    if (consent === "no") return;
+    setSyncLine("Finding map pins for " + missing.length + " new address(es)...");
+    try {
+      var r = await fetch("/api/geocode-missing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "nominatim" }),
+      });
+      var data = await r.json();
+      if (loadSeq !== state.loadSeq) return;
+      if (data.geocoded > 0) {
+        await loadGeocodeCache();
+        applyFastCoordinates();
+        renderAll();
+        toast("Found " + data.geocoded + " precise pin(s)");
+      }
+    } catch (err) {
+      // Silent failure - user can still drive with town pins
+    } finally {
+      setSyncLine();
     }
   }
 
@@ -867,7 +942,9 @@
   function stopCardHtml(stop, mode) {
     mode = mode || "stops";
     var selected = state.selectedIds.has(stop.id);
+    var isPriority = state.priorityIds.has(stop.id);
     var order = stop.routeOrder ? '<span class="order-badge">' + stop.routeOrder + '</span>' : "";
+    var priorityBadge = isPriority ? '<span class="priority-badge" title="Priority - drives first">!</span>' : '';
     var phone = stop.phone ? '<a href="tel:' + escapeAttr(stop.phone) + '">' + escapeHtml(stop.phone) + '</a>' : "No phone";
     var maps = "https://www.google.com/maps/dir/?api=1&destination=" +
       encodeURIComponent(fullAddress(stop));
@@ -876,14 +953,22 @@
       escapeAttr(stop.id) + '"' + (selected ? " checked" : "") + '> Include</label>';
     var stopActions = '<button class="mini-btn primary" type="button" data-action="navigate" data-id="' +
       escapeAttr(stop.id) + '">Navigate</button>';
-    if (mode !== "route") {
+    if (mode === "route") {
+      // Manual ordering on the Route view
+      stopActions += '<button class="mini-btn" type="button" data-action="up" data-id="' + escapeAttr(stop.id) + '" title="Move up">&uarr;</button>' +
+        '<button class="mini-btn" type="button" data-action="down" data-id="' + escapeAttr(stop.id) + '" title="Move down">&darr;</button>' +
+        '<button class="mini-btn ' + (isPriority ? "primary" : "") + '" type="button" data-action="priority" data-id="' + escapeAttr(stop.id) + '" title="Toggle priority">' +
+        (isPriority ? "Priority on" : "Priority") + '</button>';
+    } else {
       stopActions += '<button class="mini-btn" type="button" data-action="focus" data-id="' + escapeAttr(stop.id) + '">Show</button>' +
-        '<button class="mini-btn" type="button" data-action="select-only" data-id="' + escapeAttr(stop.id) + '">Only this</button>';
+        '<button class="mini-btn" type="button" data-action="select-only" data-id="' + escapeAttr(stop.id) + '">Only this</button>' +
+        '<button class="mini-btn ' + (isPriority ? "primary" : "") + '" type="button" data-action="priority" data-id="' + escapeAttr(stop.id) + '">' +
+        (isPriority ? "Priority on" : "Priority") + '</button>';
     }
     stopActions += '<button class="mini-btn danger" type="button" data-action="collect" data-id="' + escapeAttr(stop.id) + '">' +
       (state.pendingCollectIds.has(stop.id) ? "Tap again" : "Collected") + '</button>';
-    return '<article class="stop-card ' + (mode === "route" ? "route-stop " : "") + stop.corridor + (selected ? " selected" : "") + '">' +
-      '<div class="stop-top"><div><div class="stop-name">' + order + escapeHtml(stop.name) +
+    return '<article class="stop-card ' + (mode === "route" ? "route-stop " : "") + stop.corridor + (selected ? " selected" : "") + (isPriority ? " priority" : "") + '">' +
+      '<div class="stop-top"><div><div class="stop-name">' + order + priorityBadge + escapeHtml(stop.name) +
       (stop.isDraft ? ' <span class="tag warn">Local</span>' : "") + '</div>' +
       '<div class="stop-meta"><a href="' + maps + '" target="_blank" rel="noopener">' +
       escapeHtml([stop.street, stop.town].filter(Boolean).join(", ")) + '</a></div>' +
@@ -911,6 +996,9 @@
     if (!button) return;
     var action = button.dataset.action;
     var id = button.dataset.id;
+    if (action === "priority") togglePriority(id);
+    if (action === "up") moveStopBy(id, -1);
+    if (action === "down") moveStopBy(id, 1);
     if (action === "navigate") openSingleStopInMaps(id);
     if (action === "focus") focusStop(id);
     if (action === "select-only") selectOnly(id);
@@ -1675,15 +1763,82 @@
 
   function orderedSelectedStops() {
     var selected = selectedStops();
-    if (state.routeOrder.length) {
-      var byId = new Map(selected.map(function (stop) { return [stop.id, stop]; }));
-      var ordered = state.routeOrder.map(function (id) { return byId.get(id); }).filter(Boolean);
+    var byId = new Map(selected.map(function (stop) { return [stop.id, stop]; }));
+    // 1) Manual order takes precedence (Woody dragged stops up/down).
+    if (state.manualOrder.length) {
+      var ordered = state.manualOrder
+        .map(function (id) { return byId.get(id); })
+        .filter(Boolean);
       selected.forEach(function (stop) {
-        if (state.routeOrder.indexOf(stop.id) === -1) ordered.push(stop);
+        if (state.manualOrder.indexOf(stop.id) === -1) ordered.push(stop);
       });
-      return ordered;
+      return promoteToFront(ordered, state.priorityIds);
     }
-    return selected.sort(sortStopsForWork);
+    // 2) Otherwise OSRM optimised order.
+    if (state.routeOrder.length) {
+      var ordered2 = state.routeOrder.map(function (id) { return byId.get(id); }).filter(Boolean);
+      selected.forEach(function (stop) {
+        if (state.routeOrder.indexOf(stop.id) === -1) ordered2.push(stop);
+      });
+      return promoteToFront(ordered2, state.priorityIds);
+    }
+    // 3) Fallback: corridor sort.
+    return promoteToFront(selected.slice().sort(sortStopsForWork), state.priorityIds);
+  }
+
+  function promoteToFront(list, prioritySet) {
+    if (!prioritySet || !prioritySet.size) return list;
+    var pri = list.filter(function (s) { return prioritySet.has(s.id); });
+    var rest = list.filter(function (s) { return !prioritySet.has(s.id); });
+    return pri.concat(rest);
+  }
+
+  // ---------- PRIORITY + MANUAL ORDER ----------
+
+  function togglePriority(id) {
+    if (state.priorityIds.has(id)) {
+      state.priorityIds.delete(id);
+      toast("Priority off");
+    } else {
+      state.priorityIds.add(id);
+      toast("Priority on - this stop will drive first");
+    }
+    savePriorityState();
+    // Re-assign route order numbers from current orderedSelectedStops
+    refreshRouteOrderFromOrdered();
+    renderAll();
+  }
+
+  function moveStopBy(id, delta) {
+    var ordered = orderedSelectedStops();
+    var idx = ordered.findIndex(function (s) { return s.id === id; });
+    if (idx === -1) return;
+    var newIdx = idx + delta;
+    if (newIdx < 0 || newIdx >= ordered.length) {
+      toast(delta < 0 ? "Already first" : "Already last");
+      return;
+    }
+    // Capture current order, apply swap, save as manual order.
+    var ids = ordered.map(function (s) { return s.id; });
+    var tmp = ids[newIdx];
+    ids[newIdx] = ids[idx];
+    ids[idx] = tmp;
+    state.manualOrder = ids;
+    saveManualOrder();
+    // Manual order overrides OSRM order, so clear it so re-Reorganise feels fresh.
+    state.routeOrder = [];
+    state.routeMetrics = null;
+    refreshRouteOrderFromOrdered();
+    renderAll();
+  }
+
+  function refreshRouteOrderFromOrdered() {
+    var ordered = orderedSelectedStops();
+    var orderedIds = ordered.map(function (s) { return s.id; });
+    state.stops.forEach(function (stop) {
+      var idx = orderedIds.indexOf(stop.id);
+      stop.routeOrder = idx >= 0 ? idx + 1 : null;
+    });
   }
 
   function filteredCustomerStops() {
@@ -1737,10 +1892,15 @@
   function countSpaces(items) {
     var total = items.reduce(function (sum, item) {
       var lower = normalizeText(item);
+      // Free-fit items (TVs, microwaves, gas bottles) wedge in between
+      // bigger items, so they don't take a "space" on the trailer.
+      var isFree = FREE_ITEMS.some(function (free) { return lower.indexOf(free) !== -1; });
+      if (isFree) return sum;
       var isLarge = LARGE_ITEMS.some(function (large) { return lower.indexOf(large) !== -1; });
       return sum + (isLarge ? 2 : 1);
     }, 0);
-    return Math.max(total, 1);
+    // Even all-free pickups take at least 1 stop, but never less than 0 spaces.
+    return Math.max(total, 0);
   }
 
   function sumSpaces(stops) {
