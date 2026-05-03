@@ -219,14 +219,38 @@ def geocode_missing():
     progressive fallback chain (full address > street + town > town only)
     and write any new coords to the cache so /api/pickups serves them next.
 
-    Body (optional): {"provider": "google"|"nominatim", "google_key": "..."}
-    Default: nominatim (free).
+    Body (optional): {"provider": "google"|"nominatim", "google_key": "...",
+                      "force": true}  # force re-geocodes even cached entries
+    Default: provider=google when key set, nominatim otherwise.
     """
     try:
         import csv
         import io
         import time
         cache = load_geocache()
+        body = request.get_json(silent=True) or {}
+        force = bool(body.get("force"))
+        # Town-center fallback coords used by ops.js when no precise pin is known.
+        # If a cached entry matches one of these (within ~50m), treat it as stale
+        # and re-geocode with the better provider.
+        TOWN_CENTERS = {
+            (-39.0556, 174.0752),  # new plymouth
+            (-39.0360, 174.1017),  # bell block
+            (-39.1567, 174.2064),  # inglewood
+            (-39.3333, 174.2837),  # stratford
+            (-39.4290, 174.3017),  # eltham
+            (-39.5908, 174.2810),  # hawera
+            (-39.4560, 174.0158),  # opunake
+            (-39.7467, 174.4861),  # patea
+            (-39.1060, 174.0234),  # oakura
+        }
+        def is_town_center(coords):
+            if not coords:
+                return False
+            for tc in TOWN_CENTERS:
+                if abs(coords["lat"] - tc[0]) < 0.0005 and abs(coords["lng"] - tc[1]) < 0.0005:
+                    return True
+            return False
         # Pull current pickups
         sheet_url = (
             f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
@@ -252,11 +276,10 @@ def geocode_missing():
             if lat and lng:
                 continue  # already has a precise pin from the sheet
             key = " ".join((", ".join(p for p in [street, town, "Taranaki", "New Zealand"] if p)).lower().split())
-            if key in cache:
+            if key in cache and not force and not is_town_center(cache.get(key)):
                 continue
             targets.append({"name": name, "street": street, "town": town, "key": key})
 
-        body = request.get_json(silent=True) or {}
         google_key = body.get("google_key", "").strip() or os.environ.get("GOOGLE_GEOCODING_KEY", "").strip()
         # Default to Google when a key is set (more accurate on rural NZ),
         # otherwise free Nominatim.
