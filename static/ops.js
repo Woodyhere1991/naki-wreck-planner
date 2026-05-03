@@ -816,7 +816,9 @@
         lng += Math.sin(angle) * 0.0008;
       }
       var selected = state.selectedIds.has(stop.id);
-      var label = stop.routeOrder ? String(stop.routeOrder) : String(stop.spaces);
+      // Pin label: stop number once Reorganise has been tapped, otherwise
+      // blank so we don't confuse identical "1 item" labels with each other.
+      var label = stop.routeOrder ? String(stop.routeOrder) : "";
       var marker = L.marker([lat, lng], {
         icon: makePin(CORRIDOR_COLORS[stop.corridor] || "#a685ff", label),
         opacity: selected ? 1 : 0.55,
