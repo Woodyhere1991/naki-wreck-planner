@@ -933,6 +933,42 @@ h2 {
   margin-right: 6px;
 }
 
+.panel-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.customer-expander {
+  border-top: 1px solid var(--line);
+}
+
+.customer-expander > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  user-select: none;
+  background: var(--surface-2);
+}
+
+.customer-expander > summary::after {
+  content: " v";
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+.customer-expander[open] > summary::after {
+  content: " ^";
+}
+
+.customer-expander > summary:hover {
+  color: var(--ink);
+}
+
 .texts-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;

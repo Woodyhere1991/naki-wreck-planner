@@ -156,30 +156,35 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Stops</p>
-              <h2>Pick what goes on today's run</h2>
+              <h2>Today's pickup list</h2>
+              <p class="panel-sub">All open pickups from the sheet. Tap one to add or remove from today's run.</p>
             </div>
             <div class="inline-controls">
               <input id="searchInput" type="search" placeholder="Search name, phone, address">
-              <button class="soft-btn" id="clearRouteQuickBtn" type="button">Clear run</button>
-              <button class="soft-btn" id="toolsBtn" type="button">Fix data</button>
             </div>
           </div>
         <div class="simple-run-tools">
           <div>
-            <span class="label">Selected load</span>
+            <span class="label">Today's run</span>
             <strong id="mobileLoadSummary">0 spaces</strong>
           </div>
           <div class="simple-actions">
-            <button class="primary-btn" id="selectVisibleQuickBtn" type="button">Use shown</button>
-            <button class="soft-btn" id="fillLoadQuickBtn" type="button">One full load</button>
+            <button class="primary-btn" id="resetDayBtn" type="button">Reset for new day</button>
+            <button class="soft-btn" id="toolsBtn" type="button">Fix data</button>
           </div>
         </div>
-        <div class="customer-toolbar">
-          <label><input id="onlySelectedToggle" type="checkbox"> Chosen only</label>
-          <label><input id="missingCoordsToggle" type="checkbox"> Missing map pin</label>
-          <label><input id="missingPhoneToggle" type="checkbox"> Missing phone</label>
-        </div>
-        <div class="stop-list" id="customerList"></div>
+        <details class="customer-expander" id="customerExpander">
+          <summary>Show all stops to add or remove</summary>
+          <div class="customer-toolbar">
+            <label><input id="onlySelectedToggle" type="checkbox"> In today's run only</label>
+            <label><input id="missingCoordsToggle" type="checkbox"> Missing map pin</label>
+            <label><input id="missingPhoneToggle" type="checkbox"> Missing phone</label>
+            <button class="soft-btn" id="selectVisibleQuickBtn" type="button">Use shown</button>
+            <button class="soft-btn" id="fillLoadQuickBtn" type="button">Fill one load</button>
+            <button class="soft-btn" id="clearRouteQuickBtn" type="button">Clear run</button>
+          </div>
+          <div class="stop-list" id="customerList"></div>
+        </details>
       </section>
     </section>
 

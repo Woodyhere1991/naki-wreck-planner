@@ -135,6 +135,8 @@
     mapReady: false,
     tripMode: false,
     tripCurrentId: null,
+    tripPlanLength: 0,
+    tripCollectedThisRun: 0,
     priorityIds: new Set(),
     manualOrder: []
   };
@@ -170,7 +172,7 @@
       "csvStopInput", "bulkPasteToggle", "manualStopFocusBtn", "bulkPasteBox",
       "bulkStopsInput", "addBulkStopsBtn", "quickDraftForm", "toast",
       "sendAllSmsBtn", "mobileLoadSummary", "clearRouteQuickBtn", "toolsBtn",
-      "selectVisibleQuickBtn", "fillLoadQuickBtn",
+      "selectVisibleQuickBtn", "fillLoadQuickBtn", "resetDayBtn",
       "groupMessage", "copyGroupMessageBtn", "phoneList", "phoneCount",
       "emailList", "emailCount", "copyPhonesBtn", "copyEmailsBtn", "copyRunSheetBtn"
     ].forEach(function (id) {
@@ -204,6 +206,7 @@
     if (el.toolsBtn) el.toolsBtn.addEventListener("click", function () { setView("admin"); });
     if (el.selectVisibleQuickBtn) el.selectVisibleQuickBtn.addEventListener("click", selectVisibleStops);
     if (el.fillLoadQuickBtn) el.fillLoadQuickBtn.addEventListener("click", selectOneTrailerLoad);
+    if (el.resetDayBtn) el.resetDayBtn.addEventListener("click", resetDay);
     if (el.copyAllTextsBtn) el.copyAllTextsBtn.addEventListener("click", copyAllTexts);
     if (el.sendAllSmsBtn) el.sendAllSmsBtn.addEventListener("click", sendAllSms);
     if (el.copyGroupMessageBtn) el.copyGroupMessageBtn.addEventListener("click", copyGroupMessage);
@@ -457,6 +460,22 @@
       return activeIds.has(id);
     }));
 
+    // Prune ghost collected entries: keep only ids/submission_ids that match a
+    // current pickup. Otherwise old draft stop ids accumulate forever.
+    var validCollectedKeys = new Set();
+    activeStops().forEach(function (stop) {
+      validCollectedKeys.add(stop.id);
+      (stop.submissionIds || []).forEach(function (sid) { validCollectedKeys.add(String(sid)); });
+    });
+    var prunedCollected = new Set();
+    state.collectedIds.forEach(function (id) {
+      if (validCollectedKeys.has(String(id))) prunedCollected.add(id);
+    });
+    if (prunedCollected.size !== state.collectedIds.size) {
+      state.collectedIds = prunedCollected;
+      saveCollectedState();
+    }
+
     if (state.selectedIds.size === 0) {
       activeStops().forEach(function (stop) { state.selectedIds.add(stop.id); });
       saveSelectedState();
@@ -466,6 +485,23 @@
       });
       saveSelectedState();
     }
+  }
+
+  function resetDay() {
+    if (!window.confirm("Clear collected stops, priority, and manual order? Selection of all open pickups stays intact.")) return;
+    state.collectedIds = new Set();
+    state.priorityIds = new Set();
+    state.manualOrder = [];
+    state.routeOrder = [];
+    state.routeMetrics = null;
+    state.selectedIds = new Set();
+    saveCollectedState();
+    saveSelectedState();
+    try { localStorage.removeItem("nakiPriorityStops"); } catch (e) {}
+    try { localStorage.removeItem("nakiManualOrder"); } catch (e) {}
+    rebuildStops();
+    renderAll();
+    toast("Day reset - all pickups available again");
   }
 
   function buildStops(rawRows) {
@@ -1287,6 +1323,8 @@
       return;
     }
     state.tripMode = true;
+    state.tripPlanLength = stops.length;
+    state.tripCollectedThisRun = 0;
     state.tripCurrentId = nextTripStopId();
     renderTripBanner();
     renderMap();
@@ -1310,11 +1348,15 @@
   }
 
   function tripPosition() {
-    var ordered = orderedSelectedStops();
+    // Position is "how many done so far + 1 (the current one)" out of the plan
+    // length captured when the trip started. This stays stable as collected
+    // stops drop out of orderedSelectedStops().
+    var total = state.tripPlanLength || orderedSelectedStops().length;
     var current = tripCurrentStop();
-    if (!current) return { index: ordered.length, total: ordered.length };
-    var idx = ordered.findIndex(function (s) { return s.id === current.id; });
-    return { index: idx + 1, total: ordered.length };
+    if (!current) return { index: total, total: total };
+    var index = state.tripCollectedThisRun + 1;
+    if (index > total) index = total;
+    return { index: index, total: total };
   }
 
   function tripNavigateCurrent() {
@@ -1345,6 +1387,7 @@
     }
     var ids = stop.submissionIds.length ? stop.submissionIds : [stop.id];
     ids.forEach(function (id) { state.collectedIds.add(id); });
+    if (state.tripMode) state.tripCollectedThisRun += 1;
     if (stop.isDraft) removeDraftByStop(stop);
     state.routeOrder = state.routeOrder.filter(function (id) { return id !== stop.id; });
     state.selectedIds.delete(stop.id);
@@ -1368,6 +1411,8 @@
   function exitTrip() {
     state.tripMode = false;
     state.tripCurrentId = null;
+    state.tripPlanLength = 0;
+    state.tripCollectedThisRun = 0;
     var banner = document.getElementById("tripBanner");
     if (banner) banner.remove();
     renderAll();
